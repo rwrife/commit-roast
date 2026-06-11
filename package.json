@@ -1,0 +1,43 @@
+{
+  "name": "commit-roast",
+  "version": "0.1.0",
+  "description": "Roast your git commits with swappable AI personas.",
+  "bin": {
+    "commit-roast": "./dist/bin.mjs"
+  },
+  "main": "./dist/bin.mjs",
+  "files": [
+    "dist",
+    "README.md",
+    "PLAN.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node ./dist/bin.mjs",
+    "ci": "npm run build && npm test"
+  },
+  "keywords": [
+    "git",
+    "commit",
+    "cli",
+    "roast",
+    "ai"
+  ],
+  "author": "rwrife",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsup": "^8.2.4",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
