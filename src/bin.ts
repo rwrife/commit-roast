@@ -2,6 +2,8 @@ import { Command } from "commander";
 import { VERSION } from "./version.js";
 import { getRecentCommits, type Commit } from "./git.js";
 import { gradeCommit, type GradeResult } from "./grader.js";
+import { loadPersona } from "./personaLoader.js";
+import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.js";
 
 interface RoastOptions {
   count: string;
@@ -13,6 +15,7 @@ interface RoastOptions {
 export interface RoastedCommit {
   commit: Commit;
   grade: GradeResult;
+  roast: RoastResult;
 }
 
 export function buildProgram(): Command {
@@ -35,24 +38,35 @@ export function buildProgram(): Command {
         console.log("No commits found. Nothing to roast. Lucky you.");
         return;
       }
-      const roasted: RoastedCommit[] = commits.map((c) => ({
-        commit: c,
-        grade: gradeCommit(c),
-      }));
-      console.log(renderRoasts(roasted, opts.persona));
+      const persona = await loadPersona(opts.persona).catch((err) => {
+        console.error(`Could not load persona '${opts.persona}': ${err instanceof Error ? err.message : err}`);
+        process.exitCode = 1;
+        return null;
+      });
+      if (!persona) return;
+      const cfg = resolveConfigFromEnv();
+      const roasted: RoastedCommit[] = [];
+      for (const c of commits) {
+        const grade = gradeCommit(c);
+        const roast = await roastCommit(c, persona, grade.grade, cfg);
+        roasted.push({ commit: c, grade, roast });
+      }
+      console.log(renderRoasts(roasted, persona.name));
     });
 
   return program;
 }
 
 export function renderRoasts(items: RoastedCommit[], persona: string): string {
-  const header = `commit-roast v${VERSION} — persona: ${persona} (rule-based; LLM lands in M3+)`;
+  const anyLlm = items.some((i) => i.roast.source === "llm");
+  const header = `commit-roast v${VERSION} — persona: ${persona}${anyLlm ? "" : " (offline: set ROAST_API_KEY for LLM roasts)"}`;
   const lines: string[] = [header, ""];
-  for (const { commit, grade } of items) {
+  for (const { commit, grade, roast } of items) {
     lines.push(`${grade.grade}  ${commit.shortSha}  ${commit.subject}`);
-    lines.push(`    roast: ${grade.roast}`);
+    lines.push(`    roast:   ${roast.roast}`);
+    lines.push(`    rewrite: ${roast.rewrite}`);
     if (grade.reasons.length > 0) {
-      lines.push(`    notes: ${grade.reasons.join("; ")}`);
+      lines.push(`    notes:   ${grade.reasons.join("; ")}`);
     }
     lines.push("");
   }

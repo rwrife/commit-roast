@@ -12,7 +12,7 @@
     "PLAN.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/copy-personas.mjs",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
