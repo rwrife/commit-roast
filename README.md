@@ -63,9 +63,54 @@ export ROAST_MODEL=gpt-4o-mini          # default
 
 If `ROAST_API_KEY` is unset, commit-roast prints canned per-persona roasts and a basic Conventional-Commits rewrite.
 
+## Configuration
+
+`commit-roast` looks for `~/.commit-roastrc` (JSON) and uses it as the source of non-secret defaults. CLI flags override the rc file; env vars always win for secrets.
+
+```json
+{
+  "persona": "bard",
+  "count": 3,
+  "model": "qwen2.5-coder",
+  "apiBase": "http://localhost:11434/v1"
+}
+```
+
+Resolution order (lowest → highest): built-in defaults → `~/.commit-roastrc` → CLI flags → environment variables. A malformed rc file is ignored with a warning; it will never brick the CLI.
+
 ## Personas
 
-Personas live in [`src/personas/*.md`](./src/personas) as Markdown files with a small YAML frontmatter block (`name`, `style`, `temperature`). Adding a persona = adding a `.md` file. Ships with `linus`, `pm`, `bard`, `teacher`.
+Ships with four personas, each a distinct voice:
+
+| Name      | Vibe                                                                 |
+| --------- | -------------------------------------------------------------------- |
+| `linus`   | Blunt kernel maintainer energy. Brevity over politeness.             |
+| `pm`      | Passive-aggressive PM. "Just flagging… 👍" while twisting the knife. |
+| `bard`    | Shakespearean. Treats every typo as a tragedy in five acts.          |
+| `teacher` | Disappointed high-school English teacher. Red-pen energy.            |
+
+### Writing your own persona
+
+Personas live in [`src/personas/*.md`](./src/personas) as Markdown files with a small YAML frontmatter block. Adding a persona = adding a `.md` file.
+
+```markdown
+---
+name: drillsergeant
+style: Old-school drill instructor. ALL CAPS. Push-up references mandatory.
+temperature: 0.9
+---
+
+You are a drill sergeant reviewing a recruit's git commit message. Use ALL CAPS for
+emphasis. Reference push-ups. Two or three sentences. End by assigning extra duty.
+```
+
+Then: `commit-roast --persona drillsergeant`. Frontmatter fields:
+
+- **name** — lowercased identifier shown in output.
+- **style** — short tagline; used in docs / future `--list-personas` output.
+- **temperature** — sampling temperature (0.0–1.0). Higher = wilder roasts.
+
+The rest of the file is the system prompt sent to the LLM. Keep it short — the model has to leave room for the JSON reply (`{"roast":"…","rewrite":"…"}`).
 
 ## Requirements
 

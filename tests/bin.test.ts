@@ -8,13 +8,23 @@ describe("commit-roast CLI", () => {
     expect(program.version()).toBe(VERSION);
   });
 
-  it("defaults to 5 commits and the linus persona", () => {
+  it("leaves count/persona unset on the program so config layer can supply defaults", () => {
     const program = buildProgram();
-    program.exitOverride(); // don't actually exit during tests
-    // Parse with no args so commander applies defaults.
+    program.exitOverride();
+    // No args — commander used to provide defaults, but defaults now live
+    // in src/config.ts (resolveDefaults). The program should NOT inject them.
     program.parse(["node", "commit-roast"], { from: "user" });
     const opts = program.opts();
-    expect(opts.count).toBe("5");
-    expect(opts.persona).toBe("linus");
+    expect(opts.count).toBeUndefined();
+    expect(opts.persona).toBeUndefined();
+  });
+
+  it("still accepts explicit --count and --persona", () => {
+    const program = buildProgram();
+    program.exitOverride();
+    program.parse(["node", "commit-roast", "--count", "3", "--persona", "pm"], { from: "user" });
+    const opts = program.opts();
+    expect(opts.count).toBe("3");
+    expect(opts.persona).toBe("pm");
   });
 });

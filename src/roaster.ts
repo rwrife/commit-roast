@@ -16,11 +16,14 @@ export interface RoasterConfig {
   fetchImpl?: typeof fetch;
 }
 
-export function resolveConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RoasterConfig {
+export function resolveConfigFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  fallbacks: { model?: string; apiBase?: string } = {}
+): RoasterConfig {
   return {
-    apiBase: env.ROAST_API_BASE ?? "https://api.openai.com/v1",
+    apiBase: env.ROAST_API_BASE ?? fallbacks.apiBase ?? "https://api.openai.com/v1",
     apiKey: env.ROAST_API_KEY,
-    model: env.ROAST_MODEL ?? "gpt-4o-mini",
+    model: env.ROAST_MODEL ?? fallbacks.model ?? "gpt-4o-mini",
     timeoutMs: Number(env.ROAST_TIMEOUT_MS ?? 20000),
   };
 }

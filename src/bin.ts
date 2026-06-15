@@ -5,10 +5,11 @@ import { gradeCommit, type GradeResult } from "./grader.js";
 import { loadPersona } from "./personaLoader.js";
 import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.js";
 import { render } from "./render.js";
+import { loadUserConfig, resolveDefaults } from "./config.js";
 
 interface RoastOptions {
-  count: string;
-  persona: string;
+  count?: string;
+  persona?: string;
   since?: string;
   color: boolean;
   json?: boolean;
@@ -29,25 +30,32 @@ export function buildProgram(): Command {
       "Roast your last N git commits with swappable AI personas. Equal parts dev-tool and dunk-tank."
     )
     .version(VERSION, "-v, --version", "print version")
-    .option("-c, --count <n>", "number of commits to roast", "5")
-    .option("-p, --persona <name>", "persona to use", "linus")
+    // No commander defaults here — defaults come from ~/.commit-roastrc
+    // (then fall back to built-ins in src/config.ts) so we can tell whether
+    // the user actually passed a flag.
+    .option("-c, --count <n>", "number of commits to roast (default: 5, or from ~/.commit-roastrc)")
+    .option("-p, --persona <name>", "persona to use (default: linus, or from ~/.commit-roastrc)")
     .option("-s, --since <ref>", "only roast commits since this ref/sha")
     .option("--no-color", "disable colored output")
     .option("--json", "emit machine-readable JSON instead of pretty text")
     .action(async (opts: RoastOptions) => {
-      const count = Number(opts.count) || 5;
+      const userCfg = await loadUserConfig();
+      const defaults = resolveDefaults(userCfg);
+      const personaName = opts.persona ?? defaults.persona;
+      const count = opts.count !== undefined ? Number(opts.count) || defaults.count : defaults.count;
       const commits = await getRecentCommits({ count, since: opts.since });
       if (commits.length === 0) {
         console.log("No commits found. Nothing to roast. Lucky you.");
         return;
       }
-      const persona = await loadPersona(opts.persona).catch((err) => {
-        console.error(`Could not load persona '${opts.persona}': ${err instanceof Error ? err.message : err}`);
+      const persona = await loadPersona(personaName).catch((err) => {
+        console.error(`Could not load persona '${personaName}': ${err instanceof Error ? err.message : err}`);
         process.exitCode = 1;
         return null;
       });
       if (!persona) return;
-      const cfg = resolveConfigFromEnv();
+      // Env wins for secrets; rc file supplies non-secret defaults like model/apiBase.
+      const cfg = resolveConfigFromEnv(process.env, { model: defaults.model, apiBase: defaults.apiBase });
       const roasted: RoastedCommit[] = [];
       for (const c of commits) {
         const grade = gradeCommit(c);
