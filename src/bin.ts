@@ -4,12 +4,14 @@ import { getRecentCommits, type Commit } from "./git.js";
 import { gradeCommit, type GradeResult } from "./grader.js";
 import { loadPersona } from "./personaLoader.js";
 import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.js";
+import { render } from "./render.js";
 
 interface RoastOptions {
   count: string;
   persona: string;
   since?: string;
   color: boolean;
+  json?: boolean;
 }
 
 export interface RoastedCommit {
@@ -31,6 +33,7 @@ export function buildProgram(): Command {
     .option("-p, --persona <name>", "persona to use", "linus")
     .option("-s, --since <ref>", "only roast commits since this ref/sha")
     .option("--no-color", "disable colored output")
+    .option("--json", "emit machine-readable JSON instead of pretty text")
     .action(async (opts: RoastOptions) => {
       const count = Number(opts.count) || 5;
       const commits = await getRecentCommits({ count, since: opts.since });
@@ -51,27 +54,20 @@ export function buildProgram(): Command {
         const roast = await roastCommit(c, persona, grade.grade, cfg);
         roasted.push({ commit: c, grade, roast });
       }
-      console.log(renderRoasts(roasted, persona.name));
+      console.log(
+        render(roasted, {
+          persona: persona.name,
+          mode: opts.json ? "json" : "pretty",
+          color: opts.color,
+        })
+      );
     });
 
   return program;
 }
 
-export function renderRoasts(items: RoastedCommit[], persona: string): string {
-  const anyLlm = items.some((i) => i.roast.source === "llm");
-  const header = `commit-roast v${VERSION} — persona: ${persona}${anyLlm ? "" : " (offline: set ROAST_API_KEY for LLM roasts)"}`;
-  const lines: string[] = [header, ""];
-  for (const { commit, grade, roast } of items) {
-    lines.push(`${grade.grade}  ${commit.shortSha}  ${commit.subject}`);
-    lines.push(`    roast:   ${roast.roast}`);
-    lines.push(`    rewrite: ${roast.rewrite}`);
-    if (grade.reasons.length > 0) {
-      lines.push(`    notes:   ${grade.reasons.join("; ")}`);
-    }
-    lines.push("");
-  }
-  return lines.join("\n").trimEnd();
-}
+// Re-exported for backward compatibility with existing imports/tests.
+export { render as renderRoasts } from "./render.js";
 
 export function run(argv: string[] = process.argv): void {
   buildProgram().parseAsync(argv).catch((err) => {

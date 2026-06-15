@@ -6,7 +6,7 @@ See [PLAN.md](./PLAN.md) for the full pitch and roadmap.
 
 ## Status
 
-🚧 Pre-alpha. M1–M3 are in. The CLI reads your git log, grades each commit, and (with an API key) roasts + rewrites with an LLM persona. No key? It falls back to canned roasts so the tool still does something useful.
+🚧 Pre-alpha. M1–M4 are in. The CLI reads your git log, grades each commit, and (with an API key) roasts + rewrites with an LLM persona. No key? It falls back to canned roasts so the tool still does something useful.
 
 ## Quick start
 
@@ -19,7 +19,37 @@ pnpm test
 node ./dist/bin.mjs --help
 node ./dist/bin.mjs --version
 node ./dist/bin.mjs --count 3 --persona linus
+node ./dist/bin.mjs --count 3 --json        # machine-readable output
+node ./dist/bin.mjs --count 3 --no-color    # CI-friendly, also honors NO_COLOR
 ```
+
+## Output modes
+
+Pretty (default): colorized, with a persona emoji, letter-graded badge, roast, and suggested rewrite.
+
+JSON: `--json` emits a stable shape suitable for piping into other tools:
+
+```json
+{
+  "version": "0.1.0",
+  "persona": "linus",
+  "commits": [
+    {
+      "sha": "abcdef1234567890",
+      "shortSha": "abcdef1",
+      "subject": "fix: stop the bleeding",
+      "grade": "B",
+      "score": 80,
+      "reasons": ["could be more specific"],
+      "roast": "...",
+      "rewrite": "fix(io): close socket on error",
+      "source": "llm"
+    }
+  ]
+}
+```
+
+Color is auto-disabled when `--no-color` is passed or `NO_COLOR` is set in the environment ([no-color.org](https://no-color.org)).
 
 ## LLM roasts (optional)
 
