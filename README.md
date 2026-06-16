@@ -112,6 +112,28 @@ Then: `commit-roast --persona drillsergeant`. Frontmatter fields:
 
 The rest of the file is the system prompt sent to the LLM. Keep it short — the model has to leave room for the JSON reply (`{"roast":"…","rewrite":"…"}`).
 
+## Rewriting commits in place
+
+Once you've seen a roast you actually agree with, `commit-roast rewrite <sha>` will hand
+you the exact git command to apply the suggested subject:
+
+```bash
+commit-roast rewrite HEAD          # offers to run `git commit --amend` for you
+commit-roast rewrite abc1234       # prints a `git rebase --exec` script you run yourself
+commit-roast rewrite HEAD --yes    # skip the confirmation prompt
+commit-roast rewrite HEAD --force  # allow a dirty working tree
+```
+
+Rules of the road:
+
+- A dirty working tree is refused by default. Pass `--force` if you really mean it.
+- For HEAD, commit-roast can call `git commit --amend` after you confirm.
+- For older commits, commit-roast will **never** run `git rebase` for you. It prints a
+  one-liner you can review and run yourself.
+- Rewriting history changes commit SHAs. If you've already pushed the affected commits
+  to a shared branch, coordinate with collaborators and use `git push --force-with-lease`
+  (never plain `--force`).
+
 ## Requirements
 
 - Node.js 20+
