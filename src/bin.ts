@@ -6,6 +6,8 @@ import { loadPersona } from "./personaLoader.js";
 import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.js";
 import { render } from "./render.js";
 import { loadUserConfig, resolveDefaults } from "./config.js";
+import { buildRewritePlan, renderRewritePlan } from "./rewrite.js";
+import { createInterface } from "node:readline/promises";
 
 interface RoastOptions {
   count?: string;
@@ -71,7 +73,53 @@ export function buildProgram(): Command {
       );
     });
 
+  program
+    .command("rewrite <sha>")
+    .description(
+      "Show a suggested rewrite for <sha>. For HEAD, offers to run `git commit --amend`; for older commits, emits a `git rebase --exec` script."
+    )
+    .option("-y, --yes", "skip the confirmation prompt (only meaningful for HEAD)")
+    .option("-f, --force", "proceed even when the working tree is dirty")
+    .action(async (sha: string, opts: { yes?: boolean; force?: boolean }) => {
+      try {
+        const plan = await buildRewritePlan({ sha, force: opts.force });
+        console.log(renderRewritePlan(plan));
+        if (plan.mode !== "amend") {
+          // We never rewrite non-HEAD history ourselves. User runs the script.
+          return;
+        }
+        if (!opts.yes) {
+          const proceed = await confirm("\nAmend HEAD with the proposed subject? [y/N] ");
+          if (!proceed) {
+            console.log("Aborted. Nothing was changed.");
+            return;
+          }
+        }
+        const { simpleGit } = await import("simple-git");
+        await simpleGit().raw(["commit", "--amend", "-m", plan.rewrite]);
+        console.log(`Amended ${plan.shortSha}.`);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
+
   return program;
+}
+
+async function confirm(prompt: string): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    // Non-interactive: be safe, refuse.
+    console.error("Refusing to amend without a TTY. Re-run with --yes if you really mean it.");
+    return false;
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(prompt)).trim().toLowerCase();
+    return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
 }
 
 // Re-exported for backward compatibility with existing imports/tests.
