@@ -134,6 +134,24 @@ Rules of the road:
   to a shared branch, coordinate with collaborators and use `git push --force-with-lease`
   (never plain `--force`).
 
+## Git hook
+
+Wire commit-roast into git so every commit gets graded as you make it:
+
+```bash
+commit-roast hook install               # prepare-commit-msg (default)
+commit-roast hook install --type commit-msg
+commit-roast hook status                # show what's installed
+commit-roast hook uninstall             # remove it (restores any .bak)
+```
+
+- `prepare-commit-msg` writes the grade + reasons into your editor as `#`-comment lines (git strips them before recording the commit) and prints them to stderr.
+- `commit-msg` prints feedback to stderr only — useful with `git commit -m "..."`.
+- The hook only runs the deterministic rule-based grader so it never blocks or slows down a commit, and never calls an LLM.
+- Merge / squash / amended-via-`--no-edit` commits are skipped automatically.
+- If a hook already exists, install refuses unless you pass `--force` (which moves the existing one to `<hook>.bak`).
+- `core.hooksPath` and git worktrees are respected.
+
 ## Requirements
 
 - Node.js 20+

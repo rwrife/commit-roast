@@ -7,6 +7,14 @@ import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.j
 import { render } from "./render.js";
 import { loadUserConfig, resolveDefaults } from "./config.js";
 import { buildRewritePlan, renderRewritePlan } from "./rewrite.js";
+import {
+  installHook,
+  uninstallHook,
+  hookStatus,
+  runHook,
+  SUPPORTED_HOOKS,
+  type HookType,
+} from "./hook.js";
 import { createInterface } from "node:readline/promises";
 
 interface RoastOptions {
@@ -103,6 +111,124 @@ export function buildProgram(): Command {
         process.exitCode = 1;
       }
     });
+
+  const hook = program
+    .command("hook")
+    .description(
+      "Manage the prepare-commit-msg / commit-msg git hook that roasts commits at commit time."
+    );
+
+  hook
+    .command("install")
+    .description("Install commit-roast as a git hook in the current repo.")
+    .option(
+      "-t, --type <type>",
+      `hook type to install (${SUPPORTED_HOOKS.join("|")})`,
+      "prepare-commit-msg"
+    )
+    .option("-f, --force", "replace an existing non-commit-roast hook (backs it up)")
+    .option("--bin <bin>", "command to exec from the hook script", "commit-roast")
+    .action(async (opts: { type: string; force?: boolean; bin?: string }) => {
+      try {
+        const result = await installHook({
+          type: opts.type as HookType,
+          force: opts.force,
+          bin: opts.bin,
+        });
+        const verb = result.replaced ? "Replaced" : "Installed";
+        console.log(`${verb} ${result.type} hook at ${result.path}`);
+        if (result.backupPath) {
+          console.log(`Previous hook backed up to ${result.backupPath}`);
+        }
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
+
+  hook
+    .command("uninstall")
+    .description("Remove commit-roast's git hook (restores any .bak backup).")
+    .option(
+      "-t, --type <type>",
+      `hook type to remove (${SUPPORTED_HOOKS.join("|")})`,
+      "prepare-commit-msg"
+    )
+    .option("--no-restore-backup", "do not restore a <hook>.bak file if one exists")
+    .action(async (opts: { type: string; restoreBackup: boolean }) => {
+      try {
+        const result = await uninstallHook({
+          type: opts.type as HookType,
+          restoreBackup: opts.restoreBackup,
+        });
+        if (!result.removed) {
+          console.log(`No commit-roast hook removed (${result.note ?? "nothing to do"}).`);
+          return;
+        }
+        console.log(`Removed ${result.type} hook at ${result.path}`);
+        if (result.restoredFrom) {
+          console.log(`Restored previous hook from ${result.restoredFrom}`);
+        }
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
+
+  hook
+    .command("status")
+    .description("Show which commit-roast hooks are installed in this repo.")
+    .action(async () => {
+      try {
+        const rows = await hookStatus();
+        for (const row of rows) {
+          const state = !row.installed
+            ? "not installed"
+            : row.managedByCommitRoast
+              ? "installed (commit-roast)"
+              : "installed (other tool)";
+          console.log(`${row.type.padEnd(20)} ${state}  ${row.path}`);
+        }
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
+
+  // Internal: invoked by the hook script git calls. Not in --help users care about,
+  // but documented in README.
+  hook
+    .command("run")
+    .description("(Internal) Run the hook against a commit message file. Called by git.")
+    .option(
+      "-t, --type <type>",
+      `hook type being executed (${SUPPORTED_HOOKS.join("|")})`,
+      "prepare-commit-msg"
+    )
+    .argument("<messageFile>", "path to .git/COMMIT_EDITMSG")
+    .argument("[source]", "prepare-commit-msg source arg from git")
+    .argument("[sha]", "commit sha (passed by git for some sources)")
+    .action(
+      async (
+        messageFile: string,
+        source: string | undefined,
+        _sha: string | undefined,
+        opts: { type: string }
+      ) => {
+        try {
+          await runHook({
+            messageFile,
+            source,
+            type: opts.type as HookType,
+          });
+        } catch (err) {
+          // Never block a commit because the roast tool blew up.
+          process.stderr.write(
+            `commit-roast hook: ${err instanceof Error ? err.message : String(err)}\n`
+          );
+        }
+      }
+    );
 
   return program;
 }
