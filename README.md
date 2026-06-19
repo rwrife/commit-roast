@@ -152,6 +152,23 @@ commit-roast hook uninstall             # remove it (restores any .bak)
 - If a hook already exists, install refuses unless you pass `--force` (which moves the existing one to `<hook>.bak`).
 - `core.hooksPath` and git worktrees are respected.
 
+## Stats / streak mode
+
+```bash
+commit-roast stats              # last 20 commits, pretty output
+commit-roast stats --count 50   # widen the window
+commit-roast stats --since v1.0 # everything since a ref
+commit-roast stats --json       # machine-readable
+```
+
+No LLM calls — purely the rule-based grader. You get:
+
+- **Average score + letter grade** across the window
+- **Trend sparkline** (oldest → newest), so a downward slide is visible at a glance
+- **Grade distribution** (A/B/C/D/F counts)
+- **Best & worst** commit in the window, with subject and SHA
+- **Per-author breakdown** when more than one author shows up — useful in team repos
+
 ## Requirements
 
 - Node.js 20+

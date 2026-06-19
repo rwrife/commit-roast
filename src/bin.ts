@@ -7,6 +7,7 @@ import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.j
 import { render } from "./render.js";
 import { loadUserConfig, resolveDefaults } from "./config.js";
 import { buildRewritePlan, renderRewritePlan } from "./rewrite.js";
+import { gradeAll, summarize, renderStats } from "./stats.js";
 import {
   installHook,
   uninstallHook,
@@ -79,6 +80,27 @@ export function buildProgram(): Command {
           color: opts.color,
         })
       );
+    });
+
+  program
+    .command("stats")
+    .description(
+      "Score recent commits and show grade distribution, trend sparkline, best/worst, and per-author breakdown."
+    )
+    .option("-c, --count <n>", "number of commits to include (default: 20, or from ~/.commit-roastrc)")
+    .option("-s, --since <ref>", "only include commits since this ref/sha")
+    .option("--json", "emit machine-readable JSON instead of pretty text")
+    .action(async (opts: { count?: string; since?: string; json?: boolean }) => {
+      const userCfg = await loadUserConfig();
+      const defaults = resolveDefaults(userCfg);
+      // Stats is more useful over a longer window than the default roast count.
+      const count = opts.count !== undefined
+        ? Number(opts.count) || 20
+        : Math.max(defaults.count, 20);
+      const commits = await getRecentCommits({ count, since: opts.since });
+      const graded = gradeAll(commits);
+      const summary = summarize(graded);
+      console.log(renderStats(summary, { mode: opts.json ? "json" : "pretty" }));
     });
 
   program
