@@ -169,6 +169,19 @@ No LLM calls — purely the rule-based grader. You get:
 - **Best & worst** commit in the window, with subject and SHA
 - **Per-author breakdown** when more than one author shows up — useful in team repos
 
+## Team mode (roast a PR)
+
+Roast every commit on a GitHub PR and post a single rolled-up comment back to the PR — grades, roasts, and suggested rewrites in one Markdown table.
+
+```bash
+commit-roast team https://github.com/owner/repo/pull/42           # post a comment
+commit-roast team owner/repo#42 --persona pm                       # shorthand + persona
+commit-roast team owner/repo#42 --dry-run                          # print the Markdown, don't post
+commit-roast team owner/repo#42 --json                             # machine-readable
+```
+
+Requires the [`gh` CLI](https://cli.github.com/) on your `PATH` and authenticated (`gh auth login`) with permission to comment on the target repo. Falls back to canned offline roasts when `ROAST_API_KEY` isn't set, just like the main command.
+
 ## Requirements
 
 - Node.js 20+

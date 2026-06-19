@@ -9,6 +9,12 @@ import { loadUserConfig, resolveDefaults } from "./config.js";
 import { buildRewritePlan, renderRewritePlan } from "./rewrite.js";
 import { gradeAll, summarize, renderStats } from "./stats.js";
 import {
+  parsePrUrl,
+  buildTeamRoast,
+  formatTeamComment,
+  postTeamComment,
+} from "./team.js";
+import {
   installHook,
   uninstallHook,
   hookStatus,
@@ -102,6 +108,47 @@ export function buildProgram(): Command {
       const summary = summarize(graded);
       console.log(renderStats(summary, { mode: opts.json ? "json" : "pretty" }));
     });
+
+  program
+    .command("team <prUrl>")
+    .description(
+      "Roast every commit on a GitHub PR and (optionally) post a rolled-up comment. Requires `gh` for API access."
+    )
+    .option("-p, --persona <name>", "persona to use (default: linus, or from ~/.commit-roastrc)")
+    .option("--dry-run", "print the comment Markdown instead of posting it")
+    .option("--json", "emit machine-readable JSON instead of Markdown")
+    .action(
+      async (
+        prUrl: string,
+        opts: { persona?: string; dryRun?: boolean; json?: boolean }
+      ) => {
+        try {
+          const ref = parsePrUrl(prUrl);
+          const userCfg = await loadUserConfig();
+          const defaults = resolveDefaults(userCfg);
+          const personaName = opts.persona ?? defaults.persona;
+          const cfg = resolveConfigFromEnv(process.env, {
+            model: defaults.model,
+            apiBase: defaults.apiBase,
+          });
+          const result = await buildTeamRoast({ ref, personaName, config: cfg });
+          if (opts.json) {
+            console.log(JSON.stringify(result, null, 2));
+            return;
+          }
+          const body = formatTeamComment(result);
+          if (opts.dryRun) {
+            console.log(body);
+            return;
+          }
+          const url = await postTeamComment({ ref, body });
+          console.log(url ? `Posted: ${url}` : "Comment posted.");
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 1;
+        }
+      }
+    );
 
   program
     .command("rewrite <sha>")
