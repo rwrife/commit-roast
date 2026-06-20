@@ -23,6 +23,7 @@ import {
   type HookType,
 } from "./hook.js";
 import { createInterface } from "node:readline/promises";
+import { runMcpServer } from "./mcp.js";
 
 interface RoastOptions {
   count?: string;
@@ -258,6 +259,20 @@ export function buildProgram(): Command {
               : "installed (other tool)";
           console.log(`${row.type.padEnd(20)} ${state}  ${row.path}`);
         }
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("mcp")
+    .description(
+      "Run commit-roast as a Model Context Protocol (MCP) server over stdio. Exposes `roast`, `grade`, and `rewrite` tools to MCP-capable clients (Claude Desktop, Cursor, OpenClaw, etc)."
+    )
+    .action(async () => {
+      try {
+        await runMcpServer();
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));
         process.exitCode = 1;

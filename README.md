@@ -182,6 +182,42 @@ commit-roast team owner/repo#42 --json                             # machine-rea
 
 Requires the [`gh` CLI](https://cli.github.com/) on your `PATH` and authenticated (`gh auth login`) with permission to comment on the target repo. Falls back to canned offline roasts when `ROAST_API_KEY` isn't set, just like the main command.
 
+## MCP server
+
+Expose `roast`, `grade`, and `rewrite` to MCP-capable clients (Claude Desktop, Cursor, OpenClaw, etc) over stdio:
+
+```bash
+commit-roast mcp
+```
+
+The server registers three tools:
+
+| Tool      | Input                                  | What it does                                                                       |
+| --------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `roast`   | `subject`, optional `body`, `persona`  | Grades + roasts a commit message; returns the Conventional Commits rewrite.        |
+| `grade`   | `subject`, optional `body`             | Deterministic, offline rubric score (letter grade + reasons). No LLM call.         |
+| `rewrite` | `sha`, optional `force`                | Builds a rewrite plan for a real commit in the current repo. Does NOT run anything. |
+
+Example Claude Desktop / Cursor config snippet:
+
+```json
+{
+  "mcpServers": {
+    "commit-roast": {
+      "command": "commit-roast",
+      "args": ["mcp"],
+      "env": {
+        "ROAST_API_KEY": "sk-...",
+        "ROAST_MODEL": "gpt-4o-mini"
+      }
+    }
+  }
+}
+```
+
+The server writes a one-line banner to **stderr** and uses **stdout** for the MCP transport — don't pipe stdout anywhere else.
+
+
 ## Requirements
 
 - Node.js 20+
