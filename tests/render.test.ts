@@ -96,4 +96,41 @@ describe("render", () => {
     expect(shouldDisableColor(true)).toBe(true);
     expect(shouldDisableColor(undefined)).toBe(true);
   });
+
+  it("renderQuiet emits one terse line per commit and no roast body", () => {
+    const out = render(sampleItems, { persona: "linus", color: false, quiet: true });
+    const lines = out.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(out).toContain("abcdef1");
+    expect(out).toContain("1234567");
+    expect(out).toContain("fix: stop the bleeding");
+    expect(out).not.toContain("roast");
+    expect(out).not.toContain("rewrite");
+  });
+
+  it("renderQuiet marks commits below threshold as FAIL", () => {
+    const out = render(sampleItems, {
+      persona: "linus",
+      color: false,
+      quiet: true,
+      threshold: "C",
+    });
+    // B passes, F fails.
+    const [bLine, fLine] = out.split("\n");
+    expect(bLine).not.toContain("FAIL");
+    expect(fLine).toContain("FAIL");
+  });
+
+  it("renderJson adds failedThreshold when threshold is set", () => {
+    const out = renderJson(sampleItems, { persona: "linus", threshold: "C" });
+    const parsed = JSON.parse(out);
+    expect(parsed.commits[0].failedThreshold).toBe(false); // B vs C
+    expect(parsed.commits[1].failedThreshold).toBe(true);  // F vs C
+  });
+
+  it("renderJson omits failedThreshold when no threshold given", () => {
+    const out = renderJson(sampleItems, { persona: "linus" });
+    const parsed = JSON.parse(out);
+    expect(parsed.commits[0].failedThreshold).toBeUndefined();
+  });
 });

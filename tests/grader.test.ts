@@ -72,3 +72,23 @@ describe("gradeCommit", () => {
     expect(r.reasons.some((x) => /body/.test(x))).toBe(true);
   });
 });
+
+import { isBelowThreshold, normalizeGrade, GRADE_ORDER } from "../src/grader.js";
+
+describe("grade threshold helpers", () => {
+  it("orders grades best to worst", () => {
+    expect(GRADE_ORDER).toEqual(["A", "B", "C", "D", "F"]);
+  });
+  it("isBelowThreshold treats equal as passing", () => {
+    expect(isBelowThreshold("C", "C")).toBe(false);
+    expect(isBelowThreshold("B", "C")).toBe(false);
+    expect(isBelowThreshold("D", "C")).toBe(true);
+    expect(isBelowThreshold("F", "A")).toBe(true);
+    expect(isBelowThreshold("A", "F")).toBe(false);
+  });
+  it("normalizeGrade upcases and validates", () => {
+    expect(normalizeGrade("a")).toBe("A");
+    expect(normalizeGrade("F")).toBe("F");
+    expect(() => normalizeGrade("Z")).toThrow(/Invalid grade/);
+  });
+});

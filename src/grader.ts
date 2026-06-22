@@ -2,6 +2,29 @@ import type { Commit } from "./git.js";
 
 export type Grade = "A" | "B" | "C" | "D" | "F";
 
+// Ordered best → worst. Index doubles as ordinal severity.
+export const GRADE_ORDER: readonly Grade[] = ["A", "B", "C", "D", "F"] as const;
+
+export function isGrade(value: string): value is Grade {
+  return (GRADE_ORDER as readonly string[]).includes(value.toUpperCase());
+}
+
+export function normalizeGrade(value: string): Grade {
+  const upper = value.toUpperCase();
+  if (!isGrade(upper)) {
+    throw new Error(`Invalid grade "${value}". Expected one of A, B, C, D, F.`);
+  }
+  return upper as Grade;
+}
+
+/**
+ * Returns true when `actual` ranks worse than `threshold`.
+ * E.g. isBelowThreshold("D", "C") === true, isBelowThreshold("C", "C") === false.
+ */
+export function isBelowThreshold(actual: Grade, threshold: Grade): boolean {
+  return GRADE_ORDER.indexOf(actual) > GRADE_ORDER.indexOf(threshold);
+}
+
 export interface GradeResult {
   grade: Grade;
   score: number; // 0..100
