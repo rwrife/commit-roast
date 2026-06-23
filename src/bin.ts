@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { VERSION } from "./version.js";
 import { getRecentCommits, type Commit } from "./git.js";
-import { gradeCommit, type GradeResult } from "./grader.js";
+import { gradeCommit, isBelowThreshold, normalizeGrade, type Grade, type GradeResult } from "./grader.js";
 import { loadPersona } from "./personaLoader.js";
 import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.js";
 import { render } from "./render.js";
@@ -31,6 +31,8 @@ interface RoastOptions {
   since?: string;
   color: boolean;
   json?: boolean;
+  quiet?: boolean;
+  strict?: string | boolean;
 }
 
 export interface RoastedCommit {
@@ -56,6 +58,11 @@ export function buildProgram(): Command {
     .option("-s, --since <ref>", "only roast commits since this ref/sha")
     .option("--no-color", "disable colored output")
     .option("--json", "emit machine-readable JSON instead of pretty text")
+    .option("-q, --quiet", "suppress roast/rewrite body; print one line per commit (great for CI)")
+    .option(
+      "--strict [grade]",
+      "exit non-zero if any commit grades below <grade> (A|B|C|D|F; default C)"
+    )
     .action(async (opts: RoastOptions) => {
       const userCfg = await loadUserConfig();
       const defaults = resolveDefaults(userCfg);
@@ -66,6 +73,18 @@ export function buildProgram(): Command {
         console.log("No commits found. Nothing to roast. Lucky you.");
         return;
       }
+      let threshold: Grade | undefined;
+      if (opts.strict !== undefined) {
+        const raw = typeof opts.strict === "string" ? opts.strict : "C";
+        try {
+          threshold = normalizeGrade(raw);
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 2;
+          return;
+        }
+      }
+      const skipLlm = Boolean(opts.quiet);
       const persona = await loadPersona(personaName).catch((err) => {
         console.error(`Could not load persona '${personaName}': ${err instanceof Error ? err.message : err}`);
         process.exitCode = 1;
@@ -77,7 +96,9 @@ export function buildProgram(): Command {
       const roasted: RoastedCommit[] = [];
       for (const c of commits) {
         const grade = gradeCommit(c);
-        const roast = await roastCommit(c, persona, grade.grade, cfg);
+        const roast = skipLlm
+          ? { roast: grade.roast, rewrite: c.subject, source: "offline" as const }
+          : await roastCommit(c, persona, grade.grade, cfg);
         roasted.push({ commit: c, grade, roast });
       }
       console.log(
@@ -85,8 +106,21 @@ export function buildProgram(): Command {
           persona: persona.name,
           mode: opts.json ? "json" : "pretty",
           color: opts.color,
+          quiet: opts.quiet,
+          threshold,
         })
       );
+      if (threshold) {
+        const failures = roasted.filter((r) => isBelowThreshold(r.grade.grade, threshold!));
+        if (failures.length > 0) {
+          if (!opts.json) {
+            console.error(
+              `commit-roast: ${failures.length} commit(s) graded below threshold ${threshold}.`
+            );
+          }
+          process.exitCode = 1;
+        }
+      }
     });
 
   program

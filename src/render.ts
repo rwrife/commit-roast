@@ -1,6 +1,7 @@
 import chalk, { Chalk, type ChalkInstance } from "chalk";
 import { VERSION } from "./version.js";
 import type { RoastedCommit } from "./bin.js";
+import { isBelowThreshold, type Grade } from "./grader.js";
 
 export type RenderMode = "pretty" | "json";
 
@@ -8,6 +9,14 @@ export interface RenderOptions {
   persona: string;
   mode?: RenderMode;
   color?: boolean;
+  /** When true, render one terse line per commit (sha + grade + reasons). */
+  quiet?: boolean;
+  /** When set, items grading worse than this are marked as failedThreshold. */
+  threshold?: Grade;
+}
+
+function failed(grade: Grade, threshold?: Grade): boolean {
+  return threshold !== undefined && isBelowThreshold(grade, threshold);
 }
 
 const PERSONA_EMOJI: Record<string, string> = {
@@ -37,29 +46,55 @@ export function shouldDisableColor(color: boolean | undefined): boolean {
 }
 
 export function render(items: RoastedCommit[], opts: RenderOptions): string {
-  if (opts.mode === "json") return renderJson(items, opts.persona);
+  if (opts.mode === "json") return renderJson(items, opts);
+  if (opts.quiet) return renderQuiet(items, opts);
   return renderPretty(items, opts);
 }
 
-export function renderJson(items: RoastedCommit[], persona: string): string {
+export function renderJson(
+  items: RoastedCommit[],
+  optsOrPersona: RenderOptions | string
+): string {
+  const opts: RenderOptions =
+    typeof optsOrPersona === "string" ? { persona: optsOrPersona } : optsOrPersona;
   const payload = {
     version: VERSION,
-    persona,
-    commits: items.map(({ commit, grade, roast }) => ({
-      sha: commit.sha,
-      shortSha: commit.shortSha,
-      subject: commit.subject,
-      author: commit.author,
-      date: commit.date,
-      grade: grade.grade,
-      score: grade.score,
-      reasons: grade.reasons,
-      roast: roast.roast,
-      rewrite: roast.rewrite,
-      source: roast.source,
-    })),
+    persona: opts.persona,
+    commits: items.map(({ commit, grade, roast }) => {
+      const base = {
+        sha: commit.sha,
+        shortSha: commit.shortSha,
+        subject: commit.subject,
+        author: commit.author,
+        date: commit.date,
+        grade: grade.grade,
+        score: grade.score,
+        reasons: grade.reasons,
+        roast: roast.roast,
+        rewrite: roast.rewrite,
+        source: roast.source,
+      };
+      return opts.threshold
+        ? { ...base, failedThreshold: failed(grade.grade, opts.threshold) }
+        : base;
+    }),
   };
   return JSON.stringify(payload, null, 2);
+}
+
+export function renderQuiet(items: RoastedCommit[], opts: RenderOptions): string {
+  const useColor = !shouldDisableColor(opts.color);
+  const c: ChalkInstance = useColor ? chalk : new Chalk({ level: 0 });
+  const lines: string[] = [];
+  for (const { commit, grade } of items) {
+    const isFail = failed(grade.grade, opts.threshold);
+    const gradePaint = (GRADE_COLORS[grade.grade] ?? ((x: ChalkInstance) => x.white))(c);
+    const gradeBadge = gradePaint(` ${grade.grade} `);
+    const fail = isFail ? ` ${c.red.bold("FAIL")}` : "";
+    const reasons = grade.reasons.length > 0 ? `  ${c.dim(grade.reasons.join("; "))}` : "";
+    lines.push(`${gradeBadge}  ${c.dim(commit.shortSha)}${fail}  ${commit.subject}${reasons}`);
+  }
+  return lines.join("\n");
 }
 
 export function renderPretty(items: RoastedCommit[], opts: RenderOptions): string {
@@ -75,7 +110,8 @@ export function renderPretty(items: RoastedCommit[], opts: RenderOptions): strin
   for (const { commit, grade, roast } of items) {
     const gradePaint = (GRADE_COLORS[grade.grade] ?? ((x: ChalkInstance) => x.white))(c);
     const gradeBadge = gradePaint(` ${grade.grade} `);
-    lines.push(`${gradeBadge}  ${c.dim(commit.shortSha)}  ${commit.subject}`);
+    const fail = failed(grade.grade, opts.threshold) ? ` ${c.red.bold("FAIL")}` : "";
+    lines.push(`${gradeBadge}  ${c.dim(commit.shortSha)}${fail}  ${commit.subject}`);
     lines.push(`    ${c.bold("roast")}    ${roast.roast}`);
     lines.push(`    ${c.bold("rewrite")}  ${c.italic(roast.rewrite)}`);
     if (grade.reasons.length > 0) {

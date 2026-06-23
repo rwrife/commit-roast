@@ -27,4 +27,21 @@ describe("commit-roast CLI", () => {
     expect(opts.count).toBe("3");
     expect(opts.persona).toBe("pm");
   });
+
+  it("accepts --quiet and --strict flags", () => {
+    const program = buildProgram();
+    program.exitOverride();
+    program.parse(["node", "commit-roast", "--quiet", "--strict", "B"], { from: "user" });
+    const opts = program.opts();
+    expect(opts.quiet).toBe(true);
+    expect(opts.strict).toBe("B");
+  });
+
+  it("--strict without value resolves to boolean true (defaults to C in handler)", () => {
+    const program = buildProgram();
+    program.exitOverride();
+    program.parse(["node", "commit-roast", "--strict"], { from: "user" });
+    const opts = program.opts();
+    expect(opts.strict).toBe(true);
+  });
 });

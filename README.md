@@ -51,6 +51,42 @@ JSON: `--json` emits a stable shape suitable for piping into other tools:
 
 Color is auto-disabled when `--no-color` is passed or `NO_COLOR` is set in the environment ([no-color.org](https://no-color.org)).
 
+## CI usage (`--strict` / `--quiet`)
+
+Use `--strict` to turn commit-roast into a commit-message linter. The grader is rule-based and needs no API key, so it's free to run in CI.
+
+```bash
+# Roast only the new commits on this branch; fail the job if any are worse than C.
+commit-roast --since origin/main --strict --quiet --no-color
+
+# Pick your own threshold (A is brutal, F is basically off).
+commit-roast --since origin/main --strict=B --quiet
+```
+
+- `--quiet` prints one summary line per commit (`grade  sha  subject  reasons`) and skips the roast/rewrite body and any LLM calls.
+- `--strict[=<grade>]` defaults to `C`. Exits `1` if any commit grades worse than the threshold, `0` otherwise.
+- `--json` adds a per-commit `failedThreshold: true|false` field when `--strict` is active, so you can post-process in scripts.
+
+### GitHub Actions snippet
+
+```yaml
+name: commit-roast
+on:
+  pull_request:
+
+jobs:
+  roast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history for --since origin/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npx -y commit-roast --since origin/${{ github.base_ref }} --strict --quiet --no-color
+```
+
 ## LLM roasts (optional)
 
 Set a few env vars to enable real persona-driven roasts via any OpenAI-compatible endpoint (OpenAI, Ollama, LM Studio, vLLM, …):
