@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { VERSION } from "./version.js";
-import { getRecentCommits, type Commit } from "./git.js";
+import { getRecentCommits, getCommitDiff, type Commit, type CommitDiff } from "./git.js";
 import { gradeCommit, isBelowThreshold, normalizeGrade, type Grade, type GradeResult } from "./grader.js";
 import { loadPersona } from "./personaLoader.js";
 import { roastCommit, resolveConfigFromEnv, type RoastResult } from "./roaster.js";
@@ -33,12 +33,15 @@ interface RoastOptions {
   json?: boolean;
   quiet?: boolean;
   strict?: string | boolean;
+  diff?: boolean;
+  diffBytes?: string;
 }
 
 export interface RoastedCommit {
   commit: Commit;
   grade: GradeResult;
   roast: RoastResult;
+  diff?: CommitDiff;
 }
 
 export function buildProgram(): Command {
@@ -63,6 +66,14 @@ export function buildProgram(): Command {
       "--strict [grade]",
       "exit non-zero if any commit grades below <grade> (A|B|C|D|F; default C)"
     )
+    .option(
+      "--diff",
+      "include a truncated commit diff in the LLM prompt for grounded roasts (uses more tokens)"
+    )
+    .option(
+      "--diff-bytes <n>",
+      "soft cap on diff bytes per commit when --diff is set (default 4096)"
+    )
     .action(async (opts: RoastOptions) => {
       const userCfg = await loadUserConfig();
       const defaults = resolveDefaults(userCfg);
@@ -85,6 +96,9 @@ export function buildProgram(): Command {
         }
       }
       const skipLlm = Boolean(opts.quiet);
+      const wantDiff = Boolean(opts.diff) && !skipLlm;
+      const diffBytes =
+        opts.diffBytes !== undefined ? Math.max(0, Number(opts.diffBytes) || 0) : undefined;
       const persona = await loadPersona(personaName).catch((err) => {
         console.error(`Could not load persona '${personaName}': ${err instanceof Error ? err.message : err}`);
         process.exitCode = 1;
@@ -96,10 +110,15 @@ export function buildProgram(): Command {
       const roasted: RoastedCommit[] = [];
       for (const c of commits) {
         const grade = gradeCommit(c);
+        const diff = wantDiff
+          ? await getCommitDiff(c.sha, diffBytes !== undefined ? { maxBytes: diffBytes } : {}).catch(
+              () => undefined
+            )
+          : undefined;
         const roast = skipLlm
           ? { roast: grade.roast, rewrite: c.subject, source: "offline" as const }
-          : await roastCommit(c, persona, grade.grade, cfg);
-        roasted.push({ commit: c, grade, roast });
+          : await roastCommit(c, persona, grade.grade, cfg, diff ? { diff } : {});
+        roasted.push({ commit: c, grade, roast, diff });
       }
       console.log(
         render(roasted, {

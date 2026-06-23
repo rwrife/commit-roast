@@ -87,6 +87,21 @@ jobs:
       - run: npx -y commit-roast --since origin/${{ github.base_ref }} --strict --quiet --no-color
 ```
 
+## Diff-aware roasts (`--diff`)
+
+By default the LLM only sees the commit *subject* and body. With `--diff` it also receives a truncated unified diff, which lets the persona ground its critique in what actually changed ("you called this `fix:` but you added 400 lines of new code").
+
+```bash
+commit-roast --count 5 --diff             # ~4KB diff per commit (default cap)
+commit-roast --count 5 --diff --diff-bytes 8192
+```
+
+- Off by default — diffs are not cheap in tokens.
+- Each diff is capped (default 4096 bytes) and cut at file boundaries, with a `… (truncated)` marker when content was dropped.
+- Binary files and lockfile-heavy paths (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `*.lock`, `go.sum`, …) are skipped automatically.
+- `--json` adds `diffIncluded: true|false` and `diffBytes: <n>` per commit.
+- Ignored under `--quiet` (no LLM call happens in CI mode).
+
 ## LLM roasts (optional)
 
 Set a few env vars to enable real persona-driven roasts via any OpenAI-compatible endpoint (OpenAI, Ollama, LM Studio, vLLM, …):
