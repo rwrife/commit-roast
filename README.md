@@ -185,6 +185,18 @@ Rules of the road:
   to a shared branch, coordinate with collaborators and use `git push --force-with-lease`
   (never plain `--force`).
 
+## One-shot setup
+
+```bash
+commit-roast init                          # install hook + cheatsheet + .commit-roastrc
+commit-roast init --persona pm             # bake a persona into the rc file
+commit-roast init --no-hook                # rc + cheatsheet only
+commit-roast init --no-cheatsheet          # rc + hook only
+commit-roast init --force                  # overwrite existing rc/cheatsheet/hook
+```
+
+`init` is idempotent — re-running it on a configured repo prints a clear skip line per artifact instead of clobbering anything. Existing non-commit-roast hooks are left alone unless you pass `--force` (which moves them to `<hook>.bak`).
+
 ## Git hook
 
 Wire commit-roast into git so every commit gets graded as you make it:

@@ -24,6 +24,7 @@ import {
 } from "./hook.js";
 import { createInterface } from "node:readline/promises";
 import { runMcpServer } from "./mcp.js";
+import { runInit, renderInitResult } from "./init.js";
 
 interface RoastOptions {
   count?: string;
@@ -317,6 +318,40 @@ export function buildProgram(): Command {
         process.exitCode = 1;
       }
     });
+
+  program
+    .command("init")
+    .description(
+      "Bootstrap a repo for commit-roast: install the prepare-commit-msg hook, drop a Conventional Commits cheatsheet, and write a project-local .commit-roastrc."
+    )
+    .option("--no-hook", "skip installing the git hook")
+    .option("--no-cheatsheet", "skip writing COMMIT_CHEATSHEET.md")
+    .option("-p, --persona <name>", "persona to bake into .commit-roastrc (default: linus)")
+    .option("--model <model>", "default model name to bake into .commit-roastrc")
+    .option("-f, --force", "overwrite an existing .commit-roastrc, cheatsheet, or hook")
+    .action(
+      async (opts: {
+        hook: boolean;
+        cheatsheet: boolean;
+        persona?: string;
+        model?: string;
+        force?: boolean;
+      }) => {
+        try {
+          const result = await runInit({
+            noHook: !opts.hook,
+            noCheatsheet: !opts.cheatsheet,
+            persona: opts.persona,
+            model: opts.model,
+            force: opts.force,
+          });
+          console.log(renderInitResult(result));
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 1;
+        }
+      }
+    );
 
   program
     .command("mcp")
