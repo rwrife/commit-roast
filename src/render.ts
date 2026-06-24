@@ -60,7 +60,8 @@ export function renderJson(
   const payload = {
     version: VERSION,
     persona: opts.persona,
-    commits: items.map(({ commit, grade, roast }) => {
+    commits: items.map((item) => {
+      const { commit, grade, roast } = item;
       const base = {
         sha: commit.sha,
         shortSha: commit.shortSha,
@@ -73,6 +74,8 @@ export function renderJson(
         roast: roast.roast,
         rewrite: roast.rewrite,
         source: roast.source,
+        diffIncluded: Boolean(item.diff && item.diff.diff),
+        diffBytes: item.diff?.bytes ?? 0,
       };
       return opts.threshold
         ? { ...base, failedThreshold: failed(grade.grade, opts.threshold) }

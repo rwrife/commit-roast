@@ -134,3 +134,27 @@ describe("render", () => {
     expect(parsed.commits[0].failedThreshold).toBeUndefined();
   });
 });
+
+import { renderJson as renderJsonDiff } from "../src/render.js";
+
+describe("render --diff JSON fields", () => {
+  it("emits diffIncluded=false and diffBytes=0 when no diff was attached", () => {
+    const out = renderJsonDiff(sampleItems, { persona: "linus" });
+    const parsed = JSON.parse(out);
+    expect(parsed.commits[0].diffIncluded).toBe(false);
+    expect(parsed.commits[0].diffBytes).toBe(0);
+  });
+
+  it("emits diffIncluded=true and diffBytes when diff was attached", () => {
+    const withDiff = [
+      {
+        ...sampleItems[0],
+        diff: { diff: "diff --git a/x b/x\n+1\n", bytes: 22, truncated: false, skipped: [] },
+      },
+    ];
+    const out = renderJsonDiff(withDiff, { persona: "linus" });
+    const parsed = JSON.parse(out);
+    expect(parsed.commits[0].diffIncluded).toBe(true);
+    expect(parsed.commits[0].diffBytes).toBe(22);
+  });
+});

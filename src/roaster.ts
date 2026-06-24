@@ -1,10 +1,15 @@
-import type { Commit } from "./git.js";
+import type { Commit, CommitDiff } from "./git.js";
 import type { Persona } from "./personaLoader.js";
 
 export interface RoastResult {
   roast: string;
   rewrite: string;
   source: "llm" | "fallback";
+}
+
+export interface RoastCommitOptions {
+  /** Optional truncated diff to ground the roast in actual code changes. */
+  diff?: CommitDiff;
 }
 
 export interface RoasterConfig {
@@ -82,7 +87,11 @@ interface ChatResponse {
   choices?: Array<{ message?: { content?: string } }>;
 }
 
-function buildMessages(commit: Commit, persona: Persona): ChatMessage[] {
+export function buildMessages(
+  commit: Commit,
+  persona: Persona,
+  diff?: CommitDiff
+): ChatMessage[] {
   const system = [
     persona.prompt,
     "",
@@ -90,14 +99,24 @@ function buildMessages(commit: Commit, persona: Persona): ChatMessage[] {
     `{"roast":"<your roast>","rewrite":"<rewritten commit subject>"}`,
     "No prose outside the JSON. The rewrite must follow Conventional Commits",
     "(type[(scope)]: imperative subject, under 72 chars, no trailing period).",
-  ].join("\n");
-  const user = [
+    diff && diff.diff
+      ? "You will also see a truncated diff. Use it to ground the roast in what actually changed (e.g. wrong type prefix, surprise behavior, dead code). Do not quote the diff back."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const parts = [
     `Commit subject: ${commit.subject}`,
     commit.body ? `Commit body:\n${commit.body}` : "(no commit body)",
-  ].join("\n");
+  ];
+  if (diff && diff.diff) {
+    parts.push(
+      `Diff (truncated, ${diff.bytes} bytes${diff.truncated ? ", cut at file boundary" : ""}):\n${diff.diff}`
+    );
+  }
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: parts.join("\n") },
   ];
 }
 
@@ -105,7 +124,8 @@ export async function roastCommit(
   commit: Commit,
   persona: Persona,
   grade: string,
-  config: RoasterConfig = resolveConfigFromEnv()
+  config: RoasterConfig = resolveConfigFromEnv(),
+  options: RoastCommitOptions = {}
 ): Promise<RoastResult> {
   if (!config.apiKey) {
     return fallbackRoast(commit, persona, grade);
@@ -125,7 +145,7 @@ export async function roastCommit(
       body: JSON.stringify({
         model: config.model ?? "gpt-4o-mini",
         temperature: persona.temperature,
-        messages: buildMessages(commit, persona),
+        messages: buildMessages(commit, persona, options.diff),
         response_format: { type: "json_object" },
       }),
       signal: controller.signal,

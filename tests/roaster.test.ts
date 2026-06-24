@@ -138,3 +138,24 @@ describe("roaster.roastCommit", () => {
     expect(r.source).toBe("fallback");
   });
 });
+
+import { buildMessages } from "../src/roaster.js";
+
+describe("roaster.buildMessages --diff", () => {
+  it("omits diff section when no diff is provided", () => {
+    const msgs = buildMessages(commit, persona);
+    expect(msgs[1].content).not.toContain("Diff");
+  });
+
+  it("includes diff section when a diff is provided", () => {
+    const msgs = buildMessages(commit, persona, {
+      diff: "diff --git a/x b/x\n+1\n",
+      bytes: 22,
+      truncated: false,
+      skipped: [],
+    });
+    expect(msgs[1].content).toContain("Diff (truncated, 22 bytes)");
+    expect(msgs[1].content).toContain("+1");
+    expect(msgs[0].content).toContain("truncated diff");
+  });
+});
