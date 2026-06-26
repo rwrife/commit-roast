@@ -25,6 +25,12 @@ import {
 import { createInterface } from "node:readline/promises";
 import { runMcpServer } from "./mcp.js";
 import { runInit, renderInitResult } from "./init.js";
+import {
+  addPersona,
+  listAllPersonas,
+  removePersona,
+  userPersonasDir,
+} from "./personasManager.js";
 
 interface RoastOptions {
   count?: string;
@@ -352,6 +358,65 @@ export function buildProgram(): Command {
         }
       }
     );
+
+  const personas = program
+    .command("personas")
+    .description(
+      "Manage user-installed personas in ~/.commit-roast/personas/. User personas override built-ins on name collision."
+    );
+
+  personas
+    .command("add <source>")
+    .description(
+      "Install a persona from gh:owner/repo[@ref]/path.md, an https:// raw URL, or a local file path."
+    )
+    .option("-f, --force", "overwrite an existing user-installed persona with the same name")
+    .action(async (source: string, opts: { force?: boolean }) => {
+      try {
+        const result = await addPersona(source, { overwrite: opts.force });
+        console.log(`Installed persona "${result.name}" -> ${result.path}`);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
+
+  personas
+    .command("list")
+    .description("List built-in and user-installed personas.")
+    .action(async () => {
+      try {
+        const entries = await listAllPersonas();
+        if (entries.length === 0) {
+          console.log("No personas found.");
+          return;
+        }
+        for (const e of entries) {
+          console.log(`${e.name.padEnd(20)} ${e.source.padEnd(8)} ${e.path}`);
+        }
+        console.log(`\nUser personas dir: ${userPersonasDir()}`);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
+
+  personas
+    .command("remove <name>")
+    .description("Remove a user-installed persona. Built-ins cannot be removed.")
+    .action(async (name: string) => {
+      try {
+        const result = await removePersona(name);
+        if (!result.removed) {
+          console.log(result.note ?? `Nothing to remove at ${result.path}.`);
+          return;
+        }
+        console.log(`Removed persona "${name}" (${result.path}).`);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    });
 
   program
     .command("mcp")
