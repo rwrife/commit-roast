@@ -163,6 +163,32 @@ Then: `commit-roast --persona drillsergeant`. Frontmatter fields:
 
 The rest of the file is the system prompt sent to the LLM. Keep it short — the model has to leave room for the JSON reply (`{"roast":"…","rewrite":"…"}`).
 
+### Adding personas from GitHub or a file
+
+User-installed personas live in `~/.commit-roast/personas/` and override built-ins on name collisions.
+
+```bash
+# Install from a GitHub repo (default branch)
+commit-roast personas add gh:rwrife/commit-roast-personas/drill-sergeant.md
+
+# Pin to a ref (branch, tag, or sha)
+commit-roast personas add gh:rwrife/commit-roast-personas@v1.0.0/drill-sergeant.md
+
+# Or from any raw URL
+commit-roast personas add https://example.com/personas/sassy.md
+
+# Or from a local file (great for team-shared personas in a repo)
+commit-roast personas add ./team-personas/lead.md
+
+# See what's installed
+commit-roast personas list
+
+# Remove a user-installed persona (built-ins can't be removed)
+commit-roast personas remove drill-sergeant
+```
+
+Personas are validated against the frontmatter schema (`name` and `style` required, `temperature` must be numeric if present) before being written to disk — malformed files are rejected with a clear error.
+
 ## Rewriting commits in place
 
 Once you've seen a roast you actually agree with, `commit-roast rewrite <sha>` will hand
