@@ -114,6 +114,29 @@ export ROAST_MODEL=gpt-4o-mini          # default
 
 If `ROAST_API_KEY` is unset, commit-roast prints canned per-persona roasts and a basic Conventional-Commits rewrite.
 
+## Local models (`--preset`)
+
+Local OpenAI-compatible servers (Ollama, LM Studio, llama.cpp) ship with predictable URLs. Skip the env-var dance — pick a preset:
+
+```bash
+# Use Ollama with its preset default model (qwen2.5-coder)
+commit-roast --preset ollama --count 5
+
+# Same, but override the model just for this run
+commit-roast --preset ollama:llama3.1:8b
+
+# LM Studio on the default port
+commit-roast --preset lmstudio
+
+# llama.cpp server
+commit-roast --preset llamacpp
+
+# List built-in presets
+commit-roast presets list
+```
+
+Precedence (per field): `--model` / `--api-base` flags > `--preset` (incl. `:model` suffix) > `ROAST_MODEL` / `ROAST_API_BASE` env > `~/.commit-roastrc` > built-in defaults. Most local servers ignore `ROAST_API_KEY`; OpenAI requires it. If the preset's target isn't reachable, commit-roast prints a one-line hint (e.g. `ollama serve`) and falls back to offline roasts — it never blocks.
+
 ## Configuration
 
 `commit-roast` looks for `~/.commit-roastrc` (JSON) and uses it as the source of non-secret defaults. CLI flags override the rc file; env vars always win for secrets.
