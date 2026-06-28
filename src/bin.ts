@@ -31,6 +31,14 @@ import {
   removePersona,
   userPersonasDir,
 } from "./personasManager.js";
+import {
+  BUILTIN_PRESETS,
+  formatUnreachableHint,
+  parsePresetFlag,
+  pingPresetTarget,
+  renderPresetsList,
+  resolveRoasterTarget,
+} from "./presets.js";
 
 interface RoastOptions {
   count?: string;
@@ -42,6 +50,9 @@ interface RoastOptions {
   strict?: string | boolean;
   diff?: boolean;
   diffBytes?: string;
+  preset?: string;
+  model?: string;
+  apiBase?: string;
 }
 
 export interface RoastedCommit {
@@ -81,6 +92,12 @@ export function buildProgram(): Command {
       "--diff-bytes <n>",
       "soft cap on diff bytes per commit when --diff is set (default 4096)"
     )
+    .option(
+      "--preset <name>",
+      `local-model preset (e.g. ollama, lmstudio); accepts "name:model" (see: commit-roast presets list)`
+    )
+    .option("--model <model>", "override model name (highest priority)")
+    .option("--api-base <url>", "override OpenAI-compatible base URL (highest priority)")
     .action(async (opts: RoastOptions) => {
       const userCfg = await loadUserConfig();
       const defaults = resolveDefaults(userCfg);
@@ -112,8 +129,43 @@ export function buildProgram(): Command {
         return null;
       });
       if (!persona) return;
-      // Env wins for secrets; rc file supplies non-secret defaults like model/apiBase.
-      const cfg = resolveConfigFromEnv(process.env, { model: defaults.model, apiBase: defaults.apiBase });
+      let parsedPreset;
+      if (opts.preset) {
+        try {
+          parsedPreset = parsePresetFlag(opts.preset);
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 2;
+          return;
+        }
+      }
+      let target;
+      try {
+        target = resolveRoasterTarget({
+          preset: parsedPreset,
+          cliModel: opts.model,
+          cliApiBase: opts.apiBase,
+          rcDefaults: { model: defaults.model, apiBase: defaults.apiBase },
+          env: process.env,
+        });
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 2;
+        return;
+      }
+      // Env still wins for the secret (ROAST_API_KEY) and timeout.
+      const cfg = resolveConfigFromEnv(process.env, {
+        model: target.model,
+        apiBase: target.apiBase,
+      });
+      // Best-effort liveness check for presets so users get a useful hint
+      // instead of silently getting fallback roasts. Never blocks the run.
+      if (target.preset && !opts.quiet) {
+        const ping = await pingPresetTarget(target.preset);
+        if (!ping.ok) {
+          console.error(formatUnreachableHint(target.preset, ping.reason));
+        }
+      }
       const roasted: RoastedCommit[] = [];
       for (const c of commits) {
         const grade = gradeCommit(c);
@@ -416,6 +468,17 @@ export function buildProgram(): Command {
         console.error(err instanceof Error ? err.message : String(err));
         process.exitCode = 1;
       }
+    });
+
+  const presetsCmd = program
+    .command("presets")
+    .description("Inspect built-in local-model presets used by --preset.");
+
+  presetsCmd
+    .command("list")
+    .description("List built-in presets with their base URL and default model.")
+    .action(() => {
+      console.log(renderPresetsList(BUILTIN_PRESETS));
     });
 
   program
