@@ -20,6 +20,10 @@ export interface UserConfig {
   model?: string;
   /** Default OpenAI-compatible base URL. */
   apiBase?: string;
+  /** Maximum cache entries before LRU eviction (default 1000). */
+  cacheMaxEntries?: number;
+  /** Disable the roast cache entirely. */
+  cacheDisabled?: boolean;
 }
 
 export const DEFAULT_CONFIG: Required<Pick<UserConfig, "persona" | "count">> = {
@@ -88,6 +92,16 @@ export function parseUserConfig(raw: string, sourceLabel = "<rc>"): UserConfig {
   if (typeof record.apiBase === "string" && record.apiBase.trim()) {
     out.apiBase = record.apiBase.trim();
   }
+  if (
+    typeof record.cacheMaxEntries === "number" &&
+    Number.isFinite(record.cacheMaxEntries) &&
+    record.cacheMaxEntries > 0
+  ) {
+    out.cacheMaxEntries = Math.floor(record.cacheMaxEntries);
+  }
+  if (typeof record.cacheDisabled === "boolean") {
+    out.cacheDisabled = record.cacheDisabled;
+  }
   return out;
 }
 
@@ -96,6 +110,8 @@ export interface ResolvedDefaults {
   count: number;
   model?: string;
   apiBase?: string;
+  cacheMaxEntries?: number;
+  cacheDisabled?: boolean;
 }
 
 /**
@@ -108,5 +124,7 @@ export function resolveDefaults(user: UserConfig = {}): ResolvedDefaults {
     count: user.count ?? DEFAULT_CONFIG.count,
     model: user.model,
     apiBase: user.apiBase,
+    cacheMaxEntries: user.cacheMaxEntries,
+    cacheDisabled: user.cacheDisabled,
   };
 }
