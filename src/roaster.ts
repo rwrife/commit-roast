@@ -4,7 +4,7 @@ import type { Persona } from "./personaLoader.js";
 export interface RoastResult {
   roast: string;
   rewrite: string;
-  source: "llm" | "fallback";
+  source: "llm" | "fallback" | "cache";
 }
 
 export interface RoastCommitOptions {

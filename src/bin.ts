@@ -39,6 +39,7 @@ import {
   renderPresetsList,
   resolveRoasterTarget,
 } from "./presets.js";
+import { RoastCache, makeCacheKey } from "./cache.js";
 
 interface RoastOptions {
   count?: string;
@@ -53,6 +54,7 @@ interface RoastOptions {
   preset?: string;
   model?: string;
   apiBase?: string;
+  cache?: boolean;
 }
 
 export interface RoastedCommit {
@@ -98,6 +100,7 @@ export function buildProgram(): Command {
     )
     .option("--model <model>", "override model name (highest priority)")
     .option("--api-base <url>", "override OpenAI-compatible base URL (highest priority)")
+    .option("--no-cache", "bypass the roast cache (no read, no write) for this run")
     .action(async (opts: RoastOptions) => {
       const userCfg = await loadUserConfig();
       const defaults = resolveDefaults(userCfg);
@@ -167,6 +170,10 @@ export function buildProgram(): Command {
         }
       }
       const roasted: RoastedCommit[] = [];
+      const cacheEnabled = opts.cache !== false && !defaults.cacheDisabled && !skipLlm;
+      const cache = cacheEnabled
+        ? new RoastCache({ maxEntries: defaults.cacheMaxEntries })
+        : null;
       for (const c of commits) {
         const grade = gradeCommit(c);
         const diff = wantDiff
@@ -174,11 +181,30 @@ export function buildProgram(): Command {
               () => undefined
             )
           : undefined;
-        const roast = skipLlm
-          ? { roast: grade.roast, rewrite: c.subject, source: "offline" as const }
-          : await roastCommit(c, persona, grade.grade, cfg, diff ? { diff } : {});
+        let roast: RoastResult;
+        if (skipLlm) {
+          roast = { roast: grade.roast, rewrite: c.subject, source: "offline" as const };
+        } else {
+          const cacheKey = cache
+            ? makeCacheKey({
+                commitSha: c.sha,
+                persona: persona.name,
+                model: cfg.model ?? "",
+              })
+            : null;
+          const cached = cache && cacheKey ? await cache.get(cacheKey) : undefined;
+          if (cached) {
+            roast = { roast: cached.roast, rewrite: cached.rewrite, source: "cache" };
+          } else {
+            roast = await roastCommit(c, persona, grade.grade, cfg, diff ? { diff } : {});
+            if (cache && cacheKey && roast.source === "llm") {
+              await cache.set(cacheKey, { roast: roast.roast, rewrite: roast.rewrite });
+            }
+          }
+        }
         roasted.push({ commit: c, grade, roast, diff });
       }
+      if (cache) await cache.flush();
       console.log(
         render(roasted, {
           persona: persona.name,
@@ -479,6 +505,45 @@ export function buildProgram(): Command {
     .description("List built-in presets with their base URL and default model.")
     .action(() => {
       console.log(renderPresetsList(BUILTIN_PRESETS));
+    });
+
+  const cacheCmd = program
+    .command("cache")
+    .description(
+      "Inspect or clear the on-disk roast cache (~/.commit-roast/cache/roasts.json)."
+    );
+
+  cacheCmd
+    .command("stats")
+    .description("Show entry count, on-disk size, and rolling hit rate.")
+    .option("--json", "emit machine-readable JSON")
+    .action(async (opts: { json?: boolean }) => {
+      const userCfg = await loadUserConfig();
+      const defaults = resolveDefaults(userCfg);
+      const cache = new RoastCache({ maxEntries: defaults.cacheMaxEntries });
+      const s = await cache.stats();
+      if (opts.json) {
+        console.log(JSON.stringify(s, null, 2));
+        return;
+      }
+      const pct = (s.hitRate * 100).toFixed(1);
+      console.log(`path:    ${s.path}`);
+      console.log(`entries: ${s.entries}`);
+      console.log(`size:    ${s.bytes} bytes`);
+      console.log(`hits:    ${s.hits}`);
+      console.log(`misses:  ${s.misses}`);
+      console.log(`hitRate: ${pct}%`);
+    });
+
+  cacheCmd
+    .command("clear")
+    .description("Empty the roast cache.")
+    .action(async () => {
+      const userCfg = await loadUserConfig();
+      const defaults = resolveDefaults(userCfg);
+      const cache = new RoastCache({ maxEntries: defaults.cacheMaxEntries });
+      await cache.clear();
+      console.log(`Cleared cache at ${cache.path}.`);
     });
 
   program

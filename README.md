@@ -152,6 +152,28 @@ Precedence (per field): `--model` / `--api-base` flags > `--preset` (incl. `:mod
 
 Resolution order (lowest → highest): built-in defaults → `~/.commit-roastrc` → CLI flags → environment variables. A malformed rc file is ignored with a warning; it will never brick the CLI.
 
+## Performance (roast cache)
+
+LLM calls are slow and cost money. The same `(commitSha, persona, model, promptVersion)` always produces the same roast, so `commit-roast` caches results on disk at `~/.commit-roast/cache/roasts.json` and serves repeats for free.
+
+```bash
+commit-roast --count 20            # first run: LLM calls
+commit-roast --count 20            # second run: all cache hits
+commit-roast --count 20 --no-cache # bypass the cache for this run
+commit-roast cache stats           # entries, on-disk size, hit rate
+commit-roast cache clear           # nuke it
+```
+
+- JSON output marks reused entries with `"source": "cache"`.
+- Only **LLM** roasts are cached; rule-based grades and offline fallbacks aren't (they're already cheap and deterministic).
+- A `PROMPT_VERSION` constant is baked into every entry, so prompt-shape changes auto-invalidate stale roasts.
+- LRU-trimmed to **1000 entries** by default. Override via `~/.commit-roastrc`:
+
+  ```json
+  { "cacheMaxEntries": 5000, "cacheDisabled": false }
+  ```
+
+
 ## Personas
 
 Ships with four personas, each a distinct voice:
