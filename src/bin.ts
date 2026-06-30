@@ -40,6 +40,7 @@ import {
   resolveRoasterTarget,
 } from "./presets.js";
 import { RoastCache, makeCacheKey } from "./cache.js";
+import { runBadge } from "./badge.js";
 
 interface RoastOptions {
   count?: string;
@@ -545,6 +546,33 @@ export function buildProgram(): Command {
       await cache.clear();
       console.log(`Cleared cache at ${cache.path}.`);
     });
+
+  program
+    .command("badge")
+    .description(
+      "Generate a shields.io endpoint JSON (or self-contained SVG) for the rolling commit grade. Pure offline rule-based grader — no network, no LLM."
+    )
+    .option("-c, --count <n>", "number of commits to include (default: 20)", "20")
+    .option("-s, --since <ref>", "only include commits since this ref/sha")
+    .option("--svg", "emit a self-contained SVG instead of shields endpoint JSON")
+    .option("--out <path>", "write to this file instead of stdout")
+    .action(
+      async (opts: { count?: string; since?: string; svg?: boolean; out?: string }) => {
+        try {
+          const count = Math.max(1, Number(opts.count) || 20);
+          const commits = await getRecentCommits({ count, since: opts.since });
+          const result = await runBadge(commits, { svg: opts.svg, out: opts.out });
+          if (result.writtenTo) {
+            console.log(`Wrote badge to ${result.writtenTo}`);
+          } else {
+            console.log(result.content);
+          }
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 1;
+        }
+      }
+    );
 
   program
     .command("mcp")

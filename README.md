@@ -352,6 +352,46 @@ Example Claude Desktop / Cursor config snippet:
 The server writes a one-line banner to **stderr** and uses **stdout** for the MCP transport — don't pipe stdout anywhere else.
 
 
+## Status badge
+
+Generate a README grade badge from the same rule-based grader used by `--quiet` / `--strict`. Pure offline — no network calls, no LLM — so it's safe to run in CI.
+
+```bash
+# 1) shields.io endpoint JSON (host it via a gist / GitHub Pages)
+commit-roast badge --count 50 > badge.json
+# → {"schemaVersion":1,"label":"commit grade","message":"A-","color":"brightgreen"}
+
+# 2) Self-contained SVG you can commit straight into the repo
+commit-roast badge --svg --out .github/badges/commit-grade.svg
+```
+
+Then drop it into your README:
+
+```markdown
+<!-- shields endpoint -->
+![commit grade](https://img.shields.io/endpoint?url=https://example.com/badge.json)
+
+<!-- self-hosted SVG -->
+![commit grade](.github/badges/commit-grade.svg)
+```
+
+Grade → color mapping:
+
+| Grade | Color         |
+| ----- | ------------- |
+| A     | `brightgreen` |
+| B     | `green`       |
+| C     | `yellowgreen` |
+| D     | `orange`      |
+| F     | `red`         |
+
+Flags:
+
+- `--count <n>` — commits to score (default `20`)
+- `--since <ref>` — only score commits since this ref/sha
+- `--svg` — emit a self-contained SVG instead of shields endpoint JSON
+- `--out <path>` — write to disk instead of stdout
+
 ## Requirements
 
 - Node.js 20+
