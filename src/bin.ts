@@ -41,6 +41,7 @@ import {
 } from "./presets.js";
 import { RoastCache, makeCacheKey } from "./cache.js";
 import { runBadge } from "./badge.js";
+import { runWatch } from "./watch.js";
 
 interface RoastOptions {
   count?: string;
@@ -567,6 +568,54 @@ export function buildProgram(): Command {
           } else {
             console.log(result.content);
           }
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 1;
+        }
+      }
+    );
+
+  program
+    .command("watch")
+    .description(
+      "Poll the current (or --branch) HEAD and roast every new commit as it lands. Ctrl-C to stop; prints a session summary on exit."
+    )
+    .option("-b, --branch <name>", "branch to watch (default: current HEAD)")
+    .option("-p, --persona <name>", "persona to use (default: linus, or from ~/.commit-roastrc)")
+    .option("-i, --interval <ms>", "poll interval in milliseconds (default: 2000)", "2000")
+    .option("--json", "emit machine-readable JSON per commit and for the exit summary")
+    .option("--no-color", "disable colored output")
+    .option(
+      "--diff",
+      "include a truncated diff in the LLM prompt for grounded roasts (uses more tokens)"
+    )
+    .option(
+      "--diff-bytes <n>",
+      "soft cap on diff bytes per commit when --diff is set (default 4096)"
+    )
+    .action(
+      async (opts: {
+        branch?: string;
+        persona?: string;
+        interval?: string;
+        json?: boolean;
+        color: boolean;
+        diff?: boolean;
+        diffBytes?: string;
+      }) => {
+        const userCfg = await loadUserConfig();
+        const defaults = resolveDefaults(userCfg);
+        try {
+          await runWatch({
+            branch: opts.branch,
+            persona: opts.persona ?? defaults.persona,
+            interval: opts.interval,
+            json: opts.json,
+            color: opts.color,
+            diff: opts.diff,
+            diffBytes:
+              opts.diffBytes !== undefined ? Math.max(0, Number(opts.diffBytes) || 0) : undefined,
+          });
         } catch (err) {
           console.error(err instanceof Error ? err.message : String(err));
           process.exitCode = 1;
