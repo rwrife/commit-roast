@@ -303,6 +303,19 @@ No LLM calls — purely the rule-based grader. You get:
 - **Best & worst** commit in the window, with subject and SHA
 - **Per-author breakdown** when more than one author shows up — useful in team repos
 
+## Watch mode (live-roast new commits)
+
+`commit-roast watch` polls HEAD (or `--branch`) and roasts every new commit as it lands. Perfect for a second terminal during a coding session or a pairing screencast — no need to re-run the CLI after each commit.
+
+```bash
+commit-roast watch                                 # poll HEAD every 2s
+commit-roast watch --branch feature/x --persona pm # watch another branch
+commit-roast watch --interval 5000 --diff          # slower poll, grounded roasts
+commit-roast watch --json                          # JSON per commit + exit summary
+```
+
+Ctrl-C prints a one-line session summary (`Watched N commits • avg grade X`). Only commits that land **after** startup are roasted — no retroactive judgment on your current HEAD. Same SHA is never roasted twice in a single session.
+
 ## Team mode (roast a PR)
 
 Roast every commit on a GitHub PR and post a single rolled-up comment back to the PR — grades, roasts, and suggested rewrites in one Markdown table.
