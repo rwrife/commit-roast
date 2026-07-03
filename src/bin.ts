@@ -27,7 +27,9 @@ import { runMcpServer } from "./mcp.js";
 import { runInit, renderInitResult } from "./init.js";
 import {
   addPersona,
+  addPersonasFromRepo,
   listAllPersonas,
+  parseSource,
   removePersona,
   userPersonasDir,
 } from "./personasManager.js";
@@ -448,12 +450,46 @@ export function buildProgram(): Command {
   personas
     .command("add <source>")
     .description(
-      "Install a persona from gh:owner/repo[@ref]/path.md, an https:// raw URL, or a local file path."
+      "Install a persona. Accepts gh:owner/repo (bulk install every personas/*.md), gh:owner/repo[@ref]/path.md (single file), an https:// raw URL, or a local file path."
     )
     .option("-f, --force", "overwrite an existing user-installed persona with the same name")
-    .action(async (source: string, opts: { force?: boolean }) => {
+    .option(
+      "--ref <ref>",
+      "branch, tag, or commit SHA to use for gh: sources (overrides @ref in the source string; defaults to the repo's default branch)"
+    )
+    .action(async (source: string, opts: { force?: boolean; ref?: string }) => {
       try {
-        const result = await addPersona(source, { overwrite: opts.force });
+        const parsed = parseSource(source, { ref: opts.ref });
+        if (parsed.kind === "gh-dir") {
+          const result = await addPersonasFromRepo(source, {
+            overwrite: opts.force,
+            ref: opts.ref,
+          });
+          if (result.installed.length === 0 && result.skipped.length === 0) {
+            console.log("No personas installed.");
+            return;
+          }
+          for (const r of result.installed) {
+            console.log(`Installed persona "${r.name}" -> ${r.path}`);
+          }
+          for (const s of result.skipped) {
+            console.log(`Skipped ${s.path}: ${s.reason}`);
+          }
+          const failed = result.skipped.length;
+          const installed = result.installed.length;
+          console.log(
+            `\nDone: ${installed} installed, ${failed} skipped.` +
+              (failed ? " Re-run with --force to overwrite conflicts." : "")
+          );
+          if (installed === 0 && failed > 0) {
+            process.exitCode = 1;
+          }
+          return;
+        }
+        const result = await addPersona(source, {
+          overwrite: opts.force,
+          ref: opts.ref,
+        });
         console.log(`Installed persona "${result.name}" -> ${result.path}`);
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));

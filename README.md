@@ -213,17 +213,27 @@ The rest of the file is the system prompt sent to the LLM. Keep it short — the
 User-installed personas live in `~/.commit-roast/personas/` and override built-ins on name collisions.
 
 ```bash
-# Install from a GitHub repo (default branch)
+# Install a single persona from a GitHub repo (default branch)
 commit-roast personas add gh:rwrife/commit-roast-personas/drill-sergeant.md
 
-# Pin to a ref (branch, tag, or sha)
+# Pin to a ref (branch, tag, or sha) inline...
 commit-roast personas add gh:rwrife/commit-roast-personas@v1.0.0/drill-sergeant.md
+
+# ...or with the --ref flag (overrides any @ref in the source string)
+commit-roast personas add gh:rwrife/commit-roast-personas/drill-sergeant.md --ref v1.0.0
+
+# Bulk-install every persona in a community pack (looks at personas/*.md in the repo)
+commit-roast personas add gh:rwrife/commit-roast-personas
+commit-roast personas add gh:rwrife/commit-roast-personas --ref main
 
 # Or from any raw URL
 commit-roast personas add https://example.com/personas/sassy.md
 
 # Or from a local file (great for team-shared personas in a repo)
 commit-roast personas add ./team-personas/lead.md
+
+# Overwrite something you already installed
+commit-roast personas add gh:rwrife/commit-roast-personas/drill-sergeant.md --force
 
 # See what's installed
 commit-roast personas list
@@ -232,7 +242,20 @@ commit-roast personas list
 commit-roast personas remove drill-sergeant
 ```
 
-Personas are validated against the frontmatter schema (`name` and `style` required, `temperature` must be numeric if present) before being written to disk — malformed files are rejected with a clear error.
+Bulk installs use GitHub's unauthenticated contents API (60 requests/hour is
+plenty for one install). Individual files that fail validation are skipped
+with a per-file reason, so one bad persona in a pack does not abort the rest.
+Personas are validated against the frontmatter schema (`name` and `style`
+required, `temperature` must be numeric if present) before being written to
+disk — malformed files are rejected with a clear error.
+
+### Sharing personas
+
+Publishing a persona pack? Drop each persona as a `.md` file with the
+required frontmatter under a top-level `personas/` directory in your repo,
+then point people at `commit-roast personas add gh:you/your-repo`. Pin
+releases with tags and your users can install exact versions via
+`--ref v1.2.3`.
 
 ## Rewriting commits in place
 
