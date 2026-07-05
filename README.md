@@ -102,6 +102,34 @@ commit-roast --count 5 --diff --diff-bytes 8192
 - `--json` adds `diffIncluded: true|false` and `diffBytes: <n>` per commit.
 - Ignored under `--quiet` (no LLM call happens in CI mode).
 
+## Roast Battles (`--battle`)
+
+One persona is fine. Two is a fight. Roast Battle mode runs the same commit through 2–4 personas back-to-back so you can compare how Linus, Shakespeare, and your English teacher would eviscerate the same `fix: stuff`. When three very different personas all flag the same weakness, that's much stronger signal than one voice.
+
+```bash
+# Two personas, same commits
+commit-roast --count 3 --battle linus,pm
+
+# Three-way tag-team
+commit-roast --count 1 --battle linus,bard,teacher
+
+# Judge mode: LLM picks a winner and explains why (one extra call per commit)
+commit-roast --count 1 --battle linus,pm --judge
+
+# Side-by-side columns on a wide terminal (auto-stacks on narrow terminals / CI)
+commit-roast --count 1 --battle linus,pm --side-by-side
+```
+
+- `--battle <p1,p2[,p3,p4]>` accepts 2–4 comma-separated persona names, validates each via the normal persona loader, and de-dupes.
+- Each persona/commit pair is cached independently (same key scheme as the non-battle path), so re-running a battle is free after the first pass.
+- `--judge` adds one extra LLM call per commit that picks a winner and returns `{ winner, reason }`. Falls back to a deterministic offline judge (prefers roasts that name-drop commit-subject words, tiebreaks by length) when no API key is set or the LLM misbehaves.
+- `--side-by-side` renders battle roasts in adjacent columns when the terminal is ≥ 120 cols, and quietly falls back to stacked output otherwise (safe for CI logs and narrow panes).
+- `--json` adds a `battle: [{ persona, roast, rewrite, source }, ...]` array per commit, plus `judge: { winner, reason, source }` when `--judge` is on. The original `roast`/`rewrite` fields keep pointing at the primary persona so downstream tooling doesn't break when `--battle` is off.
+- Skipped under `--quiet` (CI mode does no LLM calls; battles just print fallback lines).
+
+<!-- TODO: replace with real asciinema link once one is recorded. -->
+_Demo: `asciinema:commit-roast-battle` (coming soon)_
+
 ## LLM roasts (optional)
 
 Set a few env vars to enable real persona-driven roasts via any OpenAI-compatible endpoint (OpenAI, Ollama, LM Studio, vLLM, …):

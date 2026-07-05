@@ -44,4 +44,17 @@ describe("commit-roast CLI", () => {
     const opts = program.opts();
     expect(opts.strict).toBe(true);
   });
+
+  it("accepts --battle, --side-by-side, and --judge flags", () => {
+    const program = buildProgram();
+    program.exitOverride();
+    program.parse(
+      ["node", "commit-roast", "--battle", "linus,pm", "--side-by-side", "--judge"],
+      { from: "user" }
+    );
+    const opts = program.opts();
+    expect(opts.battle).toBe("linus,pm");
+    expect(opts.sideBySide).toBe(true);
+    expect(opts.judge).toBe(true);
+  });
 });

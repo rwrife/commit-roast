@@ -44,6 +44,15 @@ import {
 import { RoastCache, makeCacheKey } from "./cache.js";
 import { runBadge } from "./badge.js";
 import { runWatch } from "./watch.js";
+import {
+  type BattleEntry,
+  type JudgeResult,
+  judgeBattle,
+  loadBattlePersonas,
+  parseBattleFlag,
+  runBattle,
+  shouldRenderSideBySide,
+} from "./battle.js";
 
 interface RoastOptions {
   count?: string;
@@ -59,6 +68,9 @@ interface RoastOptions {
   model?: string;
   apiBase?: string;
   cache?: boolean;
+  battle?: string;
+  sideBySide?: boolean;
+  judge?: boolean;
 }
 
 export interface RoastedCommit {
@@ -66,6 +78,10 @@ export interface RoastedCommit {
   grade: GradeResult;
   roast: RoastResult;
   diff?: CommitDiff;
+  /** Populated only when `--battle` was active. */
+  battle?: BattleEntry[];
+  /** Populated only when `--battle --judge` was active. */
+  judge?: JudgeResult;
 }
 
 export function buildProgram(): Command {
@@ -105,6 +121,18 @@ export function buildProgram(): Command {
     .option("--model <model>", "override model name (highest priority)")
     .option("--api-base <url>", "override OpenAI-compatible base URL (highest priority)")
     .option("--no-cache", "bypass the roast cache (no read, no write) for this run")
+    .option(
+      "--battle <personas>",
+      "Roast Battle mode: comma-separated list of 2–4 personas to run against each commit (e.g. linus,pm)"
+    )
+    .option(
+      "--side-by-side",
+      "render battle roasts in columns when the terminal is wide enough (≥ 120 cols); auto-falls-back to stacked otherwise"
+    )
+    .option(
+      "--judge",
+      "in --battle mode, add one extra LLM call per commit to pick a winner (falls back to offline judge without an API key)"
+    )
     .action(async (opts: RoastOptions) => {
       const userCfg = await loadUserConfig();
       const defaults = resolveDefaults(userCfg);
@@ -130,12 +158,34 @@ export function buildProgram(): Command {
       const wantDiff = Boolean(opts.diff) && !skipLlm;
       const diffBytes =
         opts.diffBytes !== undefined ? Math.max(0, Number(opts.diffBytes) || 0) : undefined;
+      let battleNames: string[] | undefined;
+      if (opts.battle !== undefined) {
+        try {
+          battleNames = parseBattleFlag(opts.battle);
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 2;
+          return;
+        }
+      }
       const persona = await loadPersona(personaName).catch((err) => {
         console.error(`Could not load persona '${personaName}': ${err instanceof Error ? err.message : err}`);
         process.exitCode = 1;
         return null;
       });
       if (!persona) return;
+      // Validate every battle persona up front so we fail fast instead of
+      // half-way through the first commit.
+      let battlePersonas: Awaited<ReturnType<typeof loadBattlePersonas>> | undefined;
+      if (battleNames) {
+        try {
+          battlePersonas = await loadBattlePersonas(battleNames);
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 1;
+          return;
+        }
+      }
       let parsedPreset;
       if (opts.preset) {
         try {
@@ -206,9 +256,30 @@ export function buildProgram(): Command {
             }
           }
         }
-        roasted.push({ commit: c, grade, roast, diff });
+        let battle: BattleEntry[] | undefined;
+        let judge: JudgeResult | undefined;
+        if (battlePersonas) {
+          battle = await runBattle({
+            commit: c,
+            personas: battlePersonas,
+            grade: grade.grade,
+            config: cfg,
+            cache,
+            diff: diff ?? undefined,
+            offline: skipLlm,
+          });
+          if (opts.judge && !skipLlm && battle.length >= 2) {
+            judge = await judgeBattle({ commit: c, entries: battle, config: cfg });
+          }
+        }
+        roasted.push({ commit: c, grade, roast, diff, battle, judge });
       }
       if (cache) await cache.flush();
+      const sideBySide = shouldRenderSideBySide(
+        opts.sideBySide,
+        process.stdout.columns,
+        battlePersonas?.length ?? 0
+      );
       console.log(
         render(roasted, {
           persona: persona.name,
@@ -216,6 +287,8 @@ export function buildProgram(): Command {
           color: opts.color,
           quiet: opts.quiet,
           threshold,
+          battle: Boolean(battlePersonas),
+          sideBySide,
         })
       );
       if (threshold) {
