@@ -158,3 +158,63 @@ describe("render --diff JSON fields", () => {
     expect(parsed.commits[0].diffBytes).toBe(22);
   });
 });
+
+describe("render battle mode", () => {
+  it("renderJson adds battle and judge keys only when populated", () => {
+    const withBattle = [
+      {
+        ...sampleItems[0],
+        battle: [
+          { persona: "linus", roast: "blunt", rewrite: "fix: x", source: "llm" as const },
+          { persona: "pm", roast: "soft", rewrite: "fix: x", source: "llm" as const },
+        ],
+        judge: { winner: "linus", reason: "punchier", source: "llm" as const },
+      },
+      sampleItems[1], // no battle here — key should NOT appear
+    ];
+    const out = renderJson(withBattle, { persona: "linus" });
+    const parsed = JSON.parse(out);
+    expect(parsed.commits[0].battle).toHaveLength(2);
+    expect(parsed.commits[0].battle[0].persona).toBe("linus");
+    expect(parsed.commits[0].judge).toEqual({
+      winner: "linus",
+      reason: "punchier",
+      source: "llm",
+    });
+    // Second commit has no battle — fields must be absent to keep the
+    // non-battle JSON schema identical for downstream consumers.
+    expect(parsed.commits[1].battle).toBeUndefined();
+    expect(parsed.commits[1].judge).toBeUndefined();
+  });
+
+  it("renderPretty shows a battle block per persona and a judge line when present", () => {
+    const withBattle = [
+      {
+        ...sampleItems[0],
+        battle: [
+          { persona: "linus", roast: "blunt take", rewrite: "fix: x", source: "llm" as const },
+          { persona: "pm", roast: "soft take", rewrite: "fix: x", source: "llm" as const },
+        ],
+        judge: { winner: "linus", reason: "sharper", source: "offline" as const },
+      },
+    ];
+    const out = renderPretty(withBattle, {
+      persona: "linus",
+      color: false,
+      battle: true,
+    });
+    expect(out).toContain("battle");
+    expect(out).toContain("linus");
+    expect(out).toContain("pm");
+    expect(out).toContain("blunt take");
+    expect(out).toContain("soft take");
+    expect(out).toContain("judge");
+    expect(out).toContain("🏆");
+    expect(out).toContain("sharper");
+    expect(out).toContain("(offline)");
+    // Non-battle single-persona roast/rewrite lines are suppressed in
+    // battle mode so we don't render the same commit twice.
+    const roastLineHits = out.split("\n").filter((l) => /^\s+roast\s/.test(l));
+    expect(roastLineHits.length).toBe(0);
+  });
+});
