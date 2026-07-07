@@ -147,18 +147,38 @@ export async function getCommitDiff(
 export interface GetRecentCommitsOptions {
   count?: number;
   since?: string;
+  /**
+   * Upper bound (exclusive) for `git log`. Accepts either a ref/sha OR a
+   * date string that `git log --until=<date>` understands ("2 weeks ago",
+   * "2026-06-01", ISO 8601, etc.). Ref-vs-date is auto-detected: if the
+   * value contains characters that aren't ref-safe (space, colon, etc.) or
+   * begins with a digit, we treat it as a date; otherwise a ref.
+   */
+  until?: string;
+  /** Filter by author (matches name or email; forwarded to `git log --author`). */
+  author?: string;
   cwd?: string;
   git?: SimpleGit;
 }
 
+// Heuristic: treat as a date when it looks like one. Refs don't start with a
+// digit and don't contain spaces, so this is a safe split for the values we
+// expect from `--since` / `--until`.
+function looksLikeDate(value: string): boolean {
+  if (/^\d/.test(value)) return true;
+  if (/\s/.test(value)) return true;
+  return false;
+}
+
 /**
  * Read recent commits from the current git repo.
- * Returns newest-first. `since` is any ref/sha understood by `git log`.
+ * Returns newest-first. `since` and `until` are any ref/sha or date string
+ * understood by `git log`; `author` is forwarded to `--author=` as-is.
  */
 export async function getRecentCommits(
   opts: GetRecentCommitsOptions = {}
 ): Promise<Commit[]> {
-  const { count = 5, since, cwd, git } = opts;
+  const { count = 5, since, until, author, cwd, git } = opts;
   const g = git ?? simpleGit(cwd);
 
   // Use a delimiter unlikely to appear in commit messages.
@@ -167,7 +187,22 @@ export async function getRecentCommits(
   const format = ["%H", "%h", "%s", "%b", "%an", "%aI"].join(FIELD) + RECORD;
 
   const args = ["log", `--pretty=format:${format}`, `-n`, String(count)];
-  if (since) args.push(`${since}..HEAD`);
+
+  // Prefer date-form filters when since/until look like dates; that lets
+  // callers pass "30 days ago" or "2026-06-01" alongside author filters
+  // without git squawking about a bogus revision range.
+  const sinceIsDate = since ? looksLikeDate(since) : false;
+  const untilIsDate = until ? looksLikeDate(until) : false;
+
+  if (since && !sinceIsDate && !until) {
+    // Back-compat with the old ref-only form: `<since>..HEAD`.
+    args.push(`${since}..HEAD`);
+  } else {
+    if (since) args.push(sinceIsDate ? `--since=${since}` : `${since}..HEAD`);
+    if (until) args.push(untilIsDate ? `--until=${until}` : until);
+  }
+
+  if (author) args.push(`--author=${author}`);
 
   const raw = await g.raw(args);
   if (!raw.trim()) return [];

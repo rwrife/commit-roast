@@ -354,6 +354,77 @@ No LLM calls — purely the rule-based grader. You get:
 - **Best & worst** commit in the window, with subject and SHA
 - **Per-author breakdown** when more than one author shows up — useful in team repos
 
+## Reports (`report`)
+
+`stats` is a live terminal view. `report` gives you a **shareable, exportable** version — Markdown by default (renders everywhere: GitHub, Notion, chat), with an optional single-file HTML variant (inline CSS + inline SVG sparkline, no external assets).
+
+```bash
+# Last 30 days, Markdown to stdout
+commit-roast report --since "30 days ago"
+
+# Filter by an explicit date range and author
+commit-roast report --since 2026-06-01 --until 2026-07-01 --author "Alice"
+
+# Write files: Markdown + HTML
+commit-roast report --since "30 days ago" \
+  --out reports/june.md --html reports/june.html
+
+# Include the 3 worst commits, roasted (uses cache / LLM when available;
+# falls back to canned per-persona roasts when there's no API key)
+commit-roast report --since "7 days ago" --lowlights 3
+
+# Machine-readable — same shape as the Markdown, plus a `range` object
+commit-roast report --since "30 days ago" --json
+```
+
+What you get:
+
+- **Header** with repo name and date range
+- **KPIs**: commit count, average score + letter grade, trend sparkline
+- **Grade distribution** table (A–F counts + percentages)
+- **Per-author breakdown** (sorted by average, best first) with per-grade columns
+- **Lowlights** (optional, `--lowlights N`) — the N lowest-graded commits, roasted by the chosen `--persona` (default `linus`)
+
+HTML notes:
+
+- Single self-contained file: `<style>` inline, sparkline is inline SVG, no `<link href=…>` or `<script src=…>` — safe to email or drop in a wiki
+- Respects `prefers-color-scheme` (light/dark)
+- Colors chosen for WCAG AA contrast against both themes
+
+Date filters accept anything `git log` understands:
+
+- Refs / SHAs: `--since v1.0`
+- ISO dates: `--since 2026-06-01 --until 2026-07-01`
+- Relative: `--since "30 days ago"`, `--until "yesterday"`
+
+Sample Markdown snippet (trimmed):
+
+```markdown
+# 🔥 commit-roast report — widgets
+
+since **2026-06-01** · until **2026-07-01**
+
+**Commits:** 42  ·  **Average:** 82.3 (B)  ·  **Trend:** `▄▆▇█▇▅▆▇▆▇█▇▆▅▇`
+
+## Grade distribution
+
+| Grade | Count | % |
+| :---: | ---: | ---: |
+| A | 12 | 28.6% |
+| B | 20 | 47.6% |
+| ... |
+
+## Lowlights
+
+_Roasted by **linus**._
+
+### F (5) · `deadbeef` — wip
+
+> A commit message in the same way a shrug is a conversation.
+```
+
+> _(Screenshot placeholder — drop an HTML render here once the design settles.)_
+
 ## Watch mode (live-roast new commits)
 
 `commit-roast watch` polls HEAD (or `--branch`) and roasts every new commit as it lands. Perfect for a second terminal during a coding session or a pairing screencast — no need to re-run the CLI after each commit.
