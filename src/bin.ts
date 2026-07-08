@@ -9,6 +9,12 @@ import { loadUserConfig, resolveDefaults } from "./config.js";
 import { buildRewritePlan, renderRewritePlan } from "./rewrite.js";
 import { gradeAll, summarize, renderStats } from "./stats.js";
 import {
+  buildReport,
+  renderReportJson,
+  renderReportMarkdown,
+  renderReportHtml,
+} from "./report.js";
+import {
   parsePrUrl,
   buildTeamRoast,
   formatTeamComment,
@@ -323,6 +329,101 @@ export function buildProgram(): Command {
       const graded = gradeAll(commits);
       const summary = summarize(graded);
       console.log(renderStats(summary, { mode: opts.json ? "json" : "pretty" }));
+    });
+
+  program
+    .command("report")
+    .description(
+      "Generate a shareable Markdown/HTML/JSON report card of commit hygiene over a date range."
+    )
+    .option("-s, --since <ref>", "only include commits since this ref/sha or date (e.g. '30 days ago', 2026-06-01)")
+    .option("-u, --until <ref>", "only include commits up to this ref/sha or date")
+    .option("-a, --author <pattern>", "filter commits by author (forwarded to `git log --author=`)")
+    .option("-p, --persona <name>", "persona to use for lowlight roasts (default: linus, or from ~/.commit-roastrc)")
+    .option("-o, --out <path>", "write the Markdown report to <path> instead of stdout")
+    .option("--html <path>", "also write a self-contained HTML report to <path>")
+    .option("-l, --lowlights <n>", "include the N lowest-graded commits with roasts (default 0)", "0")
+    .option("--json", "emit machine-readable JSON instead of Markdown (to stdout, or to --out)")
+    .option("--no-color", "suppress the emoji in the report header (mostly a no-op; here for parity)")
+    .action(async function (this: Command, subOpts: {
+      since?: string;
+      until?: string;
+      author?: string;
+      persona?: string;
+      out?: string;
+      html?: string;
+      lowlights?: string;
+      json?: boolean;
+      color: boolean;
+    }) {
+      // Commander v12 lets the parent action pre-consume shared flags
+      // (--since, --json) even for a subcommand. `optsWithGlobals()` merges
+      // parent globals in so `commit-roast report --json --since 30d` works
+      // regardless of which layer parsed each flag.
+      const parentOpts = (this.parent?.opts?.() ?? {}) as Record<string, unknown>;
+      const opts = {
+        since: subOpts.since ?? (typeof parentOpts.since === "string" ? parentOpts.since : undefined),
+        until: subOpts.until,
+        author: subOpts.author,
+        persona: subOpts.persona ?? (typeof parentOpts.persona === "string" ? parentOpts.persona : undefined),
+        out: subOpts.out,
+        html: subOpts.html,
+        lowlights: subOpts.lowlights,
+        json: subOpts.json ?? Boolean(parentOpts.json),
+        color: subOpts.color !== false && parentOpts.color !== false,
+      };
+      try {
+        const userCfg = await loadUserConfig();
+        const defaults = resolveDefaults(userCfg);
+        const lowlights = Math.max(0, Math.floor(Number(opts.lowlights ?? "0") || 0));
+        let persona;
+        if (lowlights > 0) {
+          const personaName = opts.persona ?? defaults.persona;
+          persona = await loadPersona(personaName).catch((err) => {
+            console.error(
+              `Could not load persona '${personaName}': ${err instanceof Error ? err.message : err}`
+            );
+            process.exitCode = 1;
+            return null;
+          });
+          if (!persona) return;
+        }
+        const cfg = resolveConfigFromEnv(process.env, {
+          model: defaults.model,
+          apiBase: defaults.apiBase,
+        });
+        const data = await buildReport({
+          since: opts.since,
+          until: opts.until,
+          author: opts.author,
+          lowlights,
+          persona: persona ?? undefined,
+          config: cfg,
+        });
+        // `--no-color` is here for CLI parity; report output is plain text.
+        void opts.color;
+        const primary = opts.json ? renderReportJson(data) : renderReportMarkdown(data);
+        if (opts.out) {
+          const { writeFile, mkdir } = await import("node:fs/promises");
+          const { dirname } = await import("node:path");
+          await mkdir(dirname(opts.out), { recursive: true });
+          await writeFile(opts.out, primary, "utf8");
+          console.log(`wrote ${opts.out}`);
+        } else {
+          console.log(primary);
+        }
+        if (opts.html) {
+          const html = renderReportHtml(data);
+          const { writeFile, mkdir } = await import("node:fs/promises");
+          const { dirname } = await import("node:path");
+          await mkdir(dirname(opts.html), { recursive: true });
+          await writeFile(opts.html, html, "utf8");
+          console.log(`wrote ${opts.html}`);
+        }
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
     });
 
   program
